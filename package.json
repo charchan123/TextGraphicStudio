@@ -1,0 +1,54 @@
+{
+  "name": "text-graphic-studio",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "vinext dev",
+    "build": "vinext build",
+    "build:netlify": "cross-env NITRO_PRESET=netlify vite build",
+    "start": "wrangler dev --config dist/server/wrangler.json",
+    "lint": "oxlint src app",
+    "test:browser": "node scripts/phase1-browser-check.mjs",
+    "format": "oxfmt"
+  },
+  "dependencies": {
+    "@base-ui/react": "1.7.0",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "fabric": "^7.4.0",
+    "lucide-react": "1.31.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-server-dom-webpack": "^19.2.8",
+    "tailwind-merge": "3.6.0",
+    "tw-animate-css": "1.4.0",
+    "vinext": "^1.0.0-beta.9",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.54.4",
+    "@cloudflare/workers-types": "^5.20260904.1",
+    "@openai/sites-vite-plugin": "0.2.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "22.19.19",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.2",
+    "@vitejs/plugin-rsc": "^0.5.34",
+    "cross-env": "^10.1.0",
+    "esbuild": "^0.28.2",
+    "nitro": "^3.0.260903-beta",
+    "oxfmt": "0.61.0",
+    "oxlint": "1.76.0",
+    "oxlint-tsgolint": "7.0.2001",
+    "playwright-core": "^1.62.1",
+    "tailwindcss": "^4.3.3",
+    "typescript": "5.9.3",
+    "vite": "^8.2.2",
+    "wrangler": "^4.129.0"
+  },
+  "type": "module"
+}
