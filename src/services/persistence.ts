@@ -1,5 +1,6 @@
 import type { BackgroundPreset, ProjectDocument } from '@/src/types/editor';
-import { isFillStyle, isPartialTextStyle, isTextBackground } from '@/src/services/styleValidation';
+import { normalizeProjectDocument, normalizeTextBackground } from '@/src/services/documentData';
+import { bounded, isColorPalette, isFillStyle, isFontReference, isPartialTextStyle, isSafeFontText, isTextBackground } from '@/src/services/styleValidation';
 
 const DATABASE_NAME = 'text-graphic-studio';
 const STORE_NAME = 'projects';
@@ -18,11 +19,20 @@ export const isProjectDocument = (value: unknown): value is ProjectDocument => {
     typeof value.canvas.height === 'number' &&
     typeof value.canvas.guidesVisible === 'boolean' &&
     typeof value.updatedAt === 'string' &&
+    (value.palette === undefined || isColorPalette(value.palette)) &&
+    (value.fontCatalog === undefined || (Array.isArray(value.fontCatalog) && value.fontCatalog.every(isFontReference))) &&
     value.objects.every((object) =>
       isRecord(object) &&
       object.kind === 'graphic-text' &&
       typeof object.id === 'string' &&
-      typeof object.text === 'string' && isTextBackground(object.background) && isFillStyle(object.fill) &&
+      typeof object.text === 'string' && isRecord(object.typography)
+      && isSafeFontText(object.typography.fontFamily)
+      && (object.typography.fontRefId === undefined || isSafeFontText(object.typography.fontRefId))
+      && (object.typography.fontStyle === undefined || object.typography.fontStyle === 'normal' || object.typography.fontStyle === 'italic' || object.typography.fontStyle === 'slant')
+      && (object.typography.slant === undefined || bounded(object.typography.slant, -25, 25))
+      && (object.typography.glyphScaleX === undefined || bounded(object.typography.glyphScaleX, 0.5, 1.5))
+      && (object.typography.glyphScaleY === undefined || bounded(object.typography.glyphScaleY, 0.5, 1.5))
+      && isTextBackground(object.background) && isFillStyle(object.fill) &&
       Array.isArray(object.partialStyles) && object.partialStyles.every(isPartialTextStyle),
     )
   );
@@ -64,7 +74,7 @@ export const saveAutosave = async (project: ProjectDocument): Promise<void> => {
 
 export const loadAutosave = async (): Promise<ProjectDocument | null> => {
   const value = await runRequest<unknown>('readonly', (store) => store.get(AUTOSAVE_KEY));
-  return isProjectDocument(value) ? value : null;
+  return isProjectDocument(value) ? normalizeProjectDocument(value) : null;
 };
 
 export const clearAutosave = async (): Promise<void> => {
@@ -77,7 +87,9 @@ export const saveBackgroundPreset = async (preset: BackgroundPreset): Promise<vo
 
 export const listBackgroundPresets = async (): Promise<BackgroundPreset[]> => {
   const presets = await runRequest<BackgroundPreset[]>('readonly', (store) => store.getAll(), PRESETS_STORE);
-  return presets.filter((preset) => isRecord(preset) && typeof preset.id === 'string' && typeof preset.name === 'string' && isTextBackground(preset.background));
+  return presets
+    .filter((preset) => isRecord(preset) && typeof preset.id === 'string' && typeof preset.name === 'string' && isTextBackground(preset.background))
+    .map((preset) => ({ ...preset, background: normalizeTextBackground(preset.background) }));
 };
 
 export const deleteBackgroundPreset = async (id: string): Promise<void> => {

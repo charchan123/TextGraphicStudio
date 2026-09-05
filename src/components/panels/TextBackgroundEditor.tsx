@@ -91,7 +91,20 @@ export function TextBackgroundEditor({ selected }: { selected: GraphicTextObject
         <Button variant="outline" disabled={busy} onClick={() => inputRef.current?.click()}><ImagePlus aria-hidden="true" />{busy ? '読み込み中…' : 'テキスト背景を読み込む'}</Button>
         <input ref={inputRef} type="file" className="sr-only" accept=".png,.svg,image/png,image/svg+xml" aria-label="テキスト背景ファイル" onChange={(event) => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ''; if (file) void loadFile(file); }} />
         {background.image && <div className="text-background-preview"><Image unoptimized src={background.image.dataUrl} width={background.image.width} height={background.image.height} alt="読み込んだテキスト背景" /><span>{background.image.fileName}</span></div>}
-        <p className="panel-note">PNG・静的SVG / 12MB・1600万画素まで。透明な外周を取り除き、文字と余白に合わせて伸縮します。SVGはローカルでPNGに変換します。</p>
+        <label className="field-label" htmlFor="text-background-image-mode">画像背景の使い方</label>
+        <NativeSelect id="text-background-image-mode" aria-label="画像背景の使い方" value={background.imageMode ?? 'fixed'} onChange={(event) => {
+          const imageMode = event.currentTarget.value as 'fixed' | 'followLines';
+          editor.commit((object) => ({ ...object, background: { ...object.background, imageMode } }));
+        }}>
+          <NativeSelectOption value="fixed">固定背景（全体に1枚）</NativeSelectOption>
+          <NativeSelectOption value="followLines">自動追従背景（行ごと）</NativeSelectOption>
+        </NativeSelect>
+        <p className="mode-description">
+          {(background.imageMode ?? 'fixed') === 'fixed'
+            ? '見本を忠実に使うモードです。画像1枚をテキスト全体の背面へ配置します。'
+            : '各行の実寸に合わせ、画像の左右端を保ちながら中央部を自然に伸縮します。'}
+        </p>
+        <p className="panel-note">PNG・静的SVG / 12MB・1600万画素まで。透明な外周を取り除き、SVGもローカルでPNG化します。</p>
       </div>}
       {type !== 'none' && <>
         <SliderField label="左右の余白" value={background.paddingX} min={0} max={160} unit="px" disabled={!background.enabled} onBegin={editor.begin} onPreview={(paddingX) => editor.preview((object) => ({ ...object, background: { ...object.background, paddingX } }))} onCommit={editor.finish} />

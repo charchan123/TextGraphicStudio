@@ -21,7 +21,9 @@ import { useKeyboardShortcuts } from '@/src/hooks/useKeyboardShortcuts';
 import { useWebMcp } from '@/src/hooks/useWebMcp';
 import { exportAllGraphicsPng, exportGraphicPng, exportProjectPng } from '@/src/services/exportService';
 import { loadBackgroundFile } from '@/src/services/imageService';
+import { getFontRestoreWarning } from '@/src/services/fontService';
 import { clearAutosave, loadAutosave, saveAutosave } from '@/src/services/persistence';
+import { loadPalettePreference, savePalettePreference } from '@/src/services/palettePreference';
 import { createTemplate, downloadTemplate, readTemplateFile } from '@/src/services/templateService';
 import { createInitialProject } from '@/src/store/defaults';
 import { useEditorStore } from '@/src/store/editorStore';
@@ -67,7 +69,10 @@ export function EditorApp() {
       .then((savedProject) => {
         if (cancelled) return;
         if (savedProject) setRestoreCandidate(savedProject);
-        else setPersistenceReady(true);
+        else {
+          replaceProject({ ...useEditorStore.getState().project, palette: loadPalettePreference() });
+          setPersistenceReady(true);
+        }
       })
       .catch(() => {
         if (!cancelled) {
@@ -78,7 +83,11 @@ export function EditorApp() {
     return () => {
       cancelled = true;
     };
-  }, [setNotice]);
+  }, [replaceProject, setNotice]);
+
+  useEffect(() => {
+    savePalettePreference(project.palette);
+  }, [project.palette]);
 
   useEffect(() => {
     if (!persistenceReady) return;
@@ -166,7 +175,8 @@ export function EditorApp() {
       setNotice('テンプレートにするテキストを選択してください。', 'warning');
       return;
     }
-    downloadTemplate(createTemplate(object, includePosition), object.name);
+    const currentProject = useEditorStore.getState().project;
+    downloadTemplate(createTemplate(object, includePosition, currentProject.palette, currentProject.fontCatalog), object.name);
     setNotice('テンプレートJSONを保存しました。', 'success');
   };
 
@@ -174,7 +184,10 @@ export function EditorApp() {
     void runTask(async () => {
       const template = await readTemplateFile(file);
       applyTemplate(template);
-    }, 'テンプレートを選択中のテキストへ適用しました。');
+    }, 'テンプレートを選択中のテキストへ適用しました。').then(() => {
+      const warning = getFontRestoreWarning(useEditorStore.getState().project);
+      if (warning) setNotice(warning, 'warning');
+    });
   };
 
   const restoreSavedProject = () => {
@@ -182,11 +195,12 @@ export function EditorApp() {
     replaceProject(restoreCandidate);
     setRestoreCandidate(null);
     setPersistenceReady(true);
-    setNotice('前回の作業を復元しました。', 'success');
+    const warning = getFontRestoreWarning(restoreCandidate);
+    setNotice(warning ?? '前回の作業を復元しました。', warning ? 'warning' : 'success');
   };
 
   const discardSavedProject = () => {
-    replaceProject(createInitialProject());
+    replaceProject(createInitialProject(loadPalettePreference(), restoreCandidate?.fontCatalog ?? project.fontCatalog));
     setRestoreCandidate(null);
     setPersistenceReady(true);
     void clearAutosave().catch(() => undefined);
@@ -207,6 +221,11 @@ export function EditorApp() {
       data-selected-rotation={selected?.transform.rotation ?? ''}
       data-selected-background-rotation={selected?.background.rotation ?? ''}
       data-selected-shadow-opacity={selected?.shadow.opacity ?? ''}
+      data-selected-glyph-scale-x={selected?.typography.glyphScaleX ?? 1}
+      data-selected-glyph-scale-y={selected?.typography.glyphScaleY ?? 1}
+      data-selected-font-style={selected?.typography.fontStyle ?? 'normal'}
+      data-selected-font-ref-id={selected?.typography.fontRefId ?? ''}
+      data-selected-background-image-mode={selected?.background.imageMode ?? 'fixed'}
     >
       <EditorToolbar
         busy={busy}

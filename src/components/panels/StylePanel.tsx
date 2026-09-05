@@ -7,6 +7,7 @@ import { SelectionEmpty } from '@/src/components/panels/SelectionEmpty';
 import { useObjectEditor } from '@/src/hooks/useObjectEditor';
 import { useEditorStore } from '@/src/store/editorStore';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import { PaletteEditor } from '@/src/components/PaletteEditor';
 
 export function StylePanel() {
   const project = useEditorStore((state) => state.project);
@@ -19,6 +20,7 @@ export function StylePanel() {
 
   return (
     <div className="panel-stack">
+      <PaletteEditor />
       <section className="panel-section">
         <div className="section-heading">
           <div>

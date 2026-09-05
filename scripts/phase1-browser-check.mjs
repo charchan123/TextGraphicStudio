@@ -166,7 +166,7 @@ try {
   await page.waitForFunction(() => document.querySelector('.editor-shell')?.getAttribute('data-object-count') === '2');
   mark('日本語2行テキスト追加');
 
-  await page.getByLabel('フォント').selectOption('Meiryo');
+  await page.getByLabel('フォント', { exact: true }).selectOption('Meiryo');
   const sizeInput = page.getByLabel('文字サイズの数値');
   const spacingInput = page.getByLabel('文字間隔の数値');
   const lineHeightInput = page.getByLabel('行間の数値');

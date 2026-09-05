@@ -5,6 +5,7 @@ import { Canvas, FabricImage, Group } from 'fabric';
 
 import { createFabricGraphicText } from '@/src/canvas/graphicTextRenderer';
 import { prepareGraphicAssets } from '@/src/services/textBackgroundAssets';
+import { waitForGraphicFonts } from '@/src/services/fontService';
 import { GuideOverlay } from '@/src/canvas/GuideOverlay';
 import { SocialGuideOverlay } from '@/src/canvas/SocialGuideOverlay';
 import { useEditorStore } from '@/src/store/editorStore';
@@ -124,7 +125,10 @@ export function FabricCanvas() {
     if (!canvasReady || !canvas) return;
     let cancelled = false;
     const rebuild = async () => {
-    await prepareGraphicAssets(project.objects);
+    await Promise.all([
+      prepareGraphicAssets(project.objects),
+      waitForGraphicFonts(project.objects),
+    ]);
     if (cancelled) return;
     const desiredSelectedId = useEditorStore.getState().selectedId;
     const previousGroups = [...groupMapRef.current.values()];

@@ -24,10 +24,33 @@ export interface LinearGradientFill {
 
 export type FillStyle = SolidFill | LinearGradientFill;
 
+export type FontStyleMode = 'normal' | 'italic' | 'slant';
+
+export interface FontReference {
+  id: string;
+  family: string;
+  fullName: string;
+  postscriptName?: string;
+  style?: string;
+  weight?: number;
+  source: 'local-access' | 'file';
+  fileName?: string;
+}
+
+export type ColorPalette = [string, string, string, string, string, string];
+
 export interface TypographyStyle {
   fontFamily: string;
+  /** Optional stable identity for a user-added local font. */
+  fontRefId?: string;
   fontSize: number;
   fontWeight: 400 | 700 | 900;
+  fontStyle?: FontStyleMode;
+  /** Visual slant in degrees. Kept separate from object rotation. */
+  slant?: number;
+  /** Glyph proportions, independent of the outer Fabric object transform. */
+  glyphScaleX?: number;
+  glyphScaleY?: number;
   letterSpacing: number;
   lineHeight: number;
   textAlign: TextAlignment;
@@ -67,6 +90,14 @@ export interface RoughBandStyle {
   roughness: number;
   seed: number;
   image?: TextBackgroundImage;
+  /** uploadedImage only: one image for the text block, or one measured image per line. */
+  imageMode?: 'fixed' | 'followLines';
+  /** Internal three-slice settings; optional for backward-compatible V1 data. */
+  followSettings?: {
+    capRatio: number;
+    seamOverlap: number;
+    lineOverlap: number;
+  };
 }
 
 export interface TextBackgroundImage {
@@ -95,6 +126,11 @@ export interface PartialTextStyle {
   fontSize?: number;
   letterSpacing?: number;
   fontWeight?: 400 | 700 | 900;
+  fontFamily?: string;
+  fontRefId?: string;
+  fontStyle?: 'normal' | 'italic';
+  glyphScaleX?: number;
+  glyphScaleY?: number;
 }
 
 export interface GraphicTextObject {
@@ -147,6 +183,9 @@ export interface ProjectDocument {
   updatedAt: string;
   canvas: CanvasSettings;
   backgroundImage: BackgroundImageData | null;
+  palette: ColorPalette;
+  /** Metadata only. Local font binaries are never persisted. */
+  fontCatalog: FontReference[];
   objects: GraphicTextObject[];
 }
 
@@ -164,6 +203,9 @@ export interface GraphicTextTemplateV1 {
   transform: GraphicTextObject['transform'];
   characterScale: CharacterScaleStyle;
   partialStyles: PartialTextStyle[];
+  palette?: ColorPalette;
+  /** Metadata only. Local font binaries are never embedded. */
+  fontCatalog?: FontReference[];
   position?: Point2D;
 }
 

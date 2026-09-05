@@ -1,6 +1,7 @@
 import { downloadTextFile, sanitizeFileName } from '@/src/services/download';
-import type { GraphicTextObject, GraphicTextTemplateV1 } from '@/src/types/editor';
-import { isFillStyle, isPartialTextStyle, isTextBackground } from '@/src/services/styleValidation';
+import type { ColorPalette, FontReference, GraphicTextObject, GraphicTextTemplateV1 } from '@/src/types/editor';
+import { cloneBackground, cloneFill, cloneFontCatalog, clonePartialStyle, normalizeTemplate } from '@/src/services/documentData';
+import { bounded, isColorPalette, isFillStyle, isFontReference, isPartialTextStyle, isSafeFontText, isTextBackground } from '@/src/services/styleValidation';
 import { prepareBackgroundImage } from '@/src/services/textBackgroundAssets';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -12,22 +13,24 @@ const isString = (value: unknown): value is string => typeof value === 'string';
 export const createTemplate = (
   object: GraphicTextObject,
   includePosition: boolean,
+  palette?: ColorPalette,
+  fontCatalog: FontReference[] = [],
 ): GraphicTextTemplateV1 => ({
   kind: 'text-graphic-studio-template',
   schemaVersion: 1,
   savedAt: new Date().toISOString(),
   includePosition,
   typography: { ...object.typography },
-  fill: object.fill.type === 'solid'
-    ? { ...object.fill }
-    : { ...object.fill, stops: object.fill.stops.map((stop) => ({ ...stop })) },
+  fill: cloneFill(object.fill),
   stroke: { ...object.stroke },
   outerStroke: { ...object.outerStroke },
   shadow: { ...object.shadow },
-  background: { ...object.background },
+  background: cloneBackground(object.background),
   transform: { ...object.transform },
   characterScale: { ...object.characterScale },
-  partialStyles: object.partialStyles.map((style) => ({ ...style })),
+  partialStyles: object.partialStyles.map(clonePartialStyle),
+  palette: palette ? [...palette] : undefined,
+  fontCatalog: cloneFontCatalog(fontCatalog),
   position: includePosition ? { ...object.position } : undefined,
 });
 
@@ -67,8 +70,13 @@ const isTemplate = (value: unknown): value is GraphicTextTemplateV1 => {
   return (
     fillIsValid &&
     isString(typography.fontFamily) &&
+    (typography.fontRefId === undefined || isSafeFontText(typography.fontRefId)) &&
     isFiniteNumber(typography.fontSize) &&
     (typography.fontWeight === 400 || typography.fontWeight === 700 || typography.fontWeight === 900) &&
+    (typography.fontStyle === undefined || typography.fontStyle === 'normal' || typography.fontStyle === 'italic' || typography.fontStyle === 'slant') &&
+    (typography.slant === undefined || bounded(typography.slant, -25, 25)) &&
+    (typography.glyphScaleX === undefined || bounded(typography.glyphScaleX, 0.5, 1.5)) &&
+    (typography.glyphScaleY === undefined || bounded(typography.glyphScaleY, 0.5, 1.5)) &&
     isFiniteNumber(typography.letterSpacing) &&
     isFiniteNumber(typography.lineHeight) &&
     (typography.textAlign === 'left' || typography.textAlign === 'center' || typography.textAlign === 'right') &&
@@ -101,6 +109,8 @@ const isTemplate = (value: unknown): value is GraphicTextTemplateV1 => {
     isFiniteNumber(characterScale.latin) &&
     isFiniteNumber(characterScale.number) &&
     Array.isArray(value.partialStyles) && value.partialStyles.every(isPartialTextStyle) &&
+    (value.palette === undefined || isColorPalette(value.palette)) &&
+    (value.fontCatalog === undefined || (Array.isArray(value.fontCatalog) && value.fontCatalog.every(isFontReference))) &&
     (!value.includePosition || (isRecord(value.position) && isFiniteNumber(value.position.x) && isFiniteNumber(value.position.y)))
   );
 };
@@ -117,5 +127,5 @@ export const readTemplateFile = async (file: File): Promise<GraphicTextTemplateV
     throw new Error('Text Graphic Studioのテンプレート形式ではありません。');
   }
   if (parsed.background.image) await prepareBackgroundImage(parsed.background.image);
-  return parsed;
+  return normalizeTemplate(parsed);
 };

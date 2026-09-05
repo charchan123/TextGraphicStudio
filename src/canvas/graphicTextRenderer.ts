@@ -46,6 +46,8 @@ const createTextLayer = (
     fontFamily: resolveFontStack(model.typography.fontFamily),
     fontSize: model.typography.fontSize,
     fontWeight: model.typography.fontWeight,
+    fontStyle: model.typography.fontStyle === 'italic' ? 'italic' : 'normal',
+    skewX: model.typography.fontStyle === 'slant' ? -(model.typography.slant ?? 12) : 0,
     charSpacing: (model.typography.letterSpacing / Math.max(1, model.typography.fontSize)) * 1000,
     lineHeight: model.typography.lineHeight,
     textAlign: model.typography.textAlign,
@@ -72,8 +74,16 @@ export const createFabricGraphicText = (model: GraphicTextObject): RenderedGraph
   const measurementText = createTextLayer(model, undefined, 0, undefined);
   const textWidth = Math.max(1, measurementText.width);
   const textHeight = Math.max(1, measurementText.height);
+  const skewX = measurementText.skewX ?? 0;
+  const shear = Math.tan(skewX * Math.PI / 180);
+  const lineLayouts = measurementText.getLineLayouts().map((line) => ({
+    ...line,
+    centerX: line.centerX + shear * line.centerY,
+    width: line.width + Math.abs(shear) * line.height,
+  }));
+  const slantedWidth = textWidth + Math.abs(shear) * textHeight;
 
-  const background = createTextBackground(model.background, textWidth, textHeight);
+  const background = createTextBackground(model.background, slantedWidth, textHeight, lineLayouts);
   if (background) children.push(background);
 
   const whiteWidth = model.stroke.enabled ? model.stroke.width : 0;

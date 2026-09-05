@@ -4,9 +4,8 @@ import { useState } from 'react';
 import { Bold, Focus, MoveHorizontal, MoveVertical, Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Textarea } from '@/components/ui/textarea';
-import { FONT_OPTIONS } from '@/src/constants/editor';
+import { FontPicker } from '@/src/components/FontPicker';
 import { SegmentedControl } from '@/src/components/controls/SegmentedControl';
 import { SliderField } from '@/src/components/controls/SliderField';
 import { SelectionEmpty } from '@/src/components/panels/SelectionEmpty';
@@ -14,12 +13,18 @@ import { PartialStyleEditor } from '@/src/components/panels/PartialStyleEditor';
 import { adjustRangesForTextEdit } from '@/src/services/partialStyles';
 import { useObjectEditor } from '@/src/hooks/useObjectEditor';
 import { useEditorStore } from '@/src/store/editorStore';
-import type { TextAlignment } from '@/src/types/editor';
+import type { FontStyleMode, TextAlignment } from '@/src/types/editor';
 
 const ALIGN_OPTIONS: Array<{ value: TextAlignment; label: string }> = [
   { value: 'left', label: '左揃え' },
   { value: 'center', label: '中央' },
   { value: 'right', label: '右揃え' },
+];
+
+const FONT_STYLE_OPTIONS: Array<{ value: FontStyleMode; label: string }> = [
+  { value: 'normal', label: '通常' },
+  { value: 'italic', label: '斜体' },
+  { value: 'slant', label: 'スラント' },
 ];
 
 export function TextPanel() {
@@ -129,22 +134,16 @@ export function TextPanel() {
           <section className="panel-section">
             <h2>文字組み</h2>
             <label className="field-label" htmlFor="font-family">フォント</label>
-            <NativeSelect
-              id="font-family"
-              className="w-full"
+            <FontPicker
               value={selected.typography.fontFamily}
-              onChange={(event) => {
-                const fontFamily = event.currentTarget.value;
+              refId={selected.typography.fontRefId}
+              onChange={({ family: fontFamily, refId }) => {
                 editor.commit((object) => ({
                   ...object,
-                  typography: { ...object.typography, fontFamily },
+                  typography: { ...object.typography, fontFamily, fontRefId: refId },
                 }));
               }}
-            >
-              {FONT_OPTIONS.map((font) => (
-                <NativeSelectOption key={font.value} value={font.value}>{font.label}</NativeSelectOption>
-              ))}
-            </NativeSelect>
+            />
 
             <Button
               type="button"
@@ -162,6 +161,34 @@ export function TextPanel() {
               <Bold aria-hidden="true" />
               太字
             </Button>
+
+            <SegmentedControl
+              label="字形の傾き"
+              value={selected.typography.fontStyle ?? 'normal'}
+              options={FONT_STYLE_OPTIONS}
+              onChange={(fontStyle) => editor.commit((object) => ({
+                ...object,
+                typography: {
+                  ...object.typography,
+                  fontStyle,
+                  slant: fontStyle === 'slant' && !object.typography.slant ? 12 : object.typography.slant,
+                },
+              }))}
+            />
+            {selected.typography.fontStyle === 'slant' && <SliderField
+              label="スラント角度"
+              value={selected.typography.slant ?? 12}
+              min={-25}
+              max={25}
+              step={0.5}
+              unit="°"
+              onBegin={editor.begin}
+              onPreview={(slant) => editor.preview((object) => ({
+                ...object,
+                typography: { ...object.typography, slant },
+              }))}
+              onCommit={editor.finish}
+            />}
 
             <SliderField
               label="文字サイズ"
@@ -199,6 +226,34 @@ export function TextPanel() {
               onPreview={(lineHeight) => editor.preview((object) => ({
                 ...object,
                 typography: { ...object.typography, lineHeight },
+              }))}
+              onCommit={editor.finish}
+            />
+            <SliderField
+              label="文字幅"
+              value={(selected.typography.glyphScaleX ?? 1) * 100}
+              min={50}
+              max={150}
+              step={1}
+              unit="%"
+              onBegin={editor.begin}
+              onPreview={(percent) => editor.preview((object) => ({
+                ...object,
+                typography: { ...object.typography, glyphScaleX: percent / 100 },
+              }))}
+              onCommit={editor.finish}
+            />
+            <SliderField
+              label="文字高さ"
+              value={(selected.typography.glyphScaleY ?? 1) * 100}
+              min={50}
+              max={150}
+              step={1}
+              unit="%"
+              onBegin={editor.begin}
+              onPreview={(percent) => editor.preview((object) => ({
+                ...object,
+                typography: { ...object.typography, glyphScaleY: percent / 100 },
               }))}
               onCommit={editor.finish}
             />

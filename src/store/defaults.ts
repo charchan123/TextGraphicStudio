@@ -1,4 +1,13 @@
-import type { GraphicTextObject, ProjectDocument } from '@/src/types/editor';
+import type { ColorPalette, FontReference, GraphicTextObject, ProjectDocument } from '@/src/types/editor';
+
+export const DEFAULT_COLOR_PALETTE: ColorPalette = [
+  '#000000',
+  '#FFFFFF',
+  '#D10D18',
+  '#1236B7',
+  '#F4D507',
+  '#F08A16',
+];
 
 export type GraphicTextPreset = Omit<
   GraphicTextObject,
@@ -18,6 +27,10 @@ export const DEFAULT_GRAPHIC_TEXT_PRESET: GraphicTextPreset = {
     fontFamily: 'Yu Gothic UI',
     fontSize: 96,
     fontWeight: 900,
+    fontStyle: 'normal',
+    slant: 0,
+    glyphScaleX: 1,
+    glyphScaleY: 1,
     letterSpacing: 0,
     lineHeight: 1.05,
     textAlign: 'center',
@@ -49,6 +62,8 @@ export const DEFAULT_GRAPHIC_TEXT_PRESET: GraphicTextPreset = {
     paddingY: 22,
     roughness: 0.55,
     seed: 1847,
+    imageMode: 'fixed',
+    followSettings: { capRatio: 0.22, seamOverlap: 2, lineOverlap: 6 },
   },
   partialStyles: [],
   locked: false,
@@ -96,13 +111,19 @@ export const createGraphicText = (
     background: {
       ...preset.background,
       seed: preset.background.seed + index * 137,
+      followSettings: preset.background.followSettings
+        ? { ...preset.background.followSettings }
+        : undefined,
     },
     partialStyles: preset.partialStyles.map((style) => ({ ...style })),
     zIndex: index,
   };
 };
 
-export const createInitialProject = (): ProjectDocument => {
+export const createInitialProject = (
+  palette: ColorPalette = DEFAULT_COLOR_PALETTE,
+  fontCatalog: FontReference[] = [],
+): ProjectDocument => {
   const width = 1080;
   const height = 1920;
   const sampleObject = {
@@ -115,6 +136,8 @@ export const createInitialProject = (): ProjectDocument => {
     updatedAt: new Date().toISOString(),
     canvas: { width, height, preset: 'portrait', guidesVisible: true },
     backgroundImage: null,
+    palette: [...palette],
+    fontCatalog: fontCatalog.map((font) => ({ ...font })),
     objects: [sampleObject],
   };
 };

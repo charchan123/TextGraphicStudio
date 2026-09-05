@@ -4,11 +4,13 @@ import type { Canvas as FabricCanvas } from 'fabric';
 import { create } from 'zustand';
 
 import { HISTORY_LIMIT } from '@/src/constants/editor';
+import { cloneBackground, cloneFill, cloneFontCatalog, clonePartialStyle } from '@/src/services/documentData';
 import { createGraphicText, createInitialProject, createObjectId } from '@/src/store/defaults';
 import type {
   AppNotice,
   BackgroundImageData,
   CanvasPresetId,
+  FontReference,
   GraphicTextObject,
   GraphicTextTemplateV1,
   ProjectDocument,
@@ -48,6 +50,8 @@ interface EditorState {
   setCanvasSize: (width: number, height: number, preset: CanvasPresetId) => void;
   toggleGuides: () => void;
   setSocialGuide: (guide: SocialGuide) => void;
+  setPaletteColor: (index: number, color: string) => void;
+  addFontReference: (font: FontReference) => void;
   applyTemplate: (template: GraphicTextTemplateV1) => void;
   replaceProject: (project: ProjectDocument) => void;
   createNewProject: () => void;
@@ -206,14 +210,12 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         transform: { ...source.transform },
         typography: { ...source.typography },
         characterScale: { ...source.characterScale },
-        fill: source.fill.type === 'solid'
-          ? { ...source.fill }
-          : { ...source.fill, stops: source.fill.stops.map((stop) => ({ ...stop })) },
+        fill: cloneFill(source.fill),
         stroke: { ...source.stroke },
         outerStroke: { ...source.outerStroke },
         shadow: { ...source.shadow },
-        background: { ...source.background, seed: source.background.seed + 97 },
-        partialStyles: source.partialStyles.map((style) => ({ ...style })),
+        background: { ...cloneBackground(source.background), seed: source.background.seed + 97 },
+        partialStyles: source.partialStyles.map(clonePartialStyle),
         locked: false,
         zIndex: state.project.objects.length,
       };
@@ -298,25 +300,67 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     transactionBase: null,
   })),
 
-  applyTemplate: (template) => {
-    const id = get().selectedId;
-    if (!id) return;
-    get().updateObject(id, (object) => ({
-      ...object,
+  setPaletteColor: (index, color) => set((state) => {
+    if (index < 0 || index >= state.project.palette.length || state.project.palette[index] === color) return state;
+    const palette = [...state.project.palette];
+    palette[index] = color.toUpperCase();
+    return {
+      project: stampProject({ ...state.project, palette: palette as ProjectDocument['palette'] }),
+      past: pushHistory(state.past, state.transactionBase ?? state.project),
+      future: [],
+      transactionBase: null,
+    };
+  }),
+
+  addFontReference: (font) => set((state) => {
+    const fontCatalog = state.project.fontCatalog.some((item) => item.id === font.id)
+      ? state.project.fontCatalog.map((item) => item.id === font.id ? { ...font } : item)
+      : [...state.project.fontCatalog, { ...font }];
+    return {
+      project: stampProject({ ...state.project, fontCatalog }),
+      past: pushHistory(state.past, state.transactionBase ?? state.project),
+      future: [],
+      transactionBase: null,
+    };
+  }),
+
+  applyTemplate: (template) => set((state) => {
+    const id = state.selectedId;
+    if (!id) return state;
+    const existing = state.project.objects.find((object) => object.id === id);
+    if (!existing) return state;
+    const incomingFonts = cloneFontCatalog(template.fontCatalog ?? []);
+    const fontCatalog = [...state.project.fontCatalog];
+    incomingFonts.forEach((font) => {
+      const index = fontCatalog.findIndex((item) => item.id === font.id);
+      if (index >= 0) fontCatalog[index] = font;
+      else fontCatalog.push(font);
+    });
+    const updated: GraphicTextObject = {
+      ...existing,
       typography: { ...template.typography },
-      fill: template.fill.type === 'solid'
-        ? { ...template.fill }
-        : { ...template.fill, stops: template.fill.stops.map((stop) => ({ ...stop })) },
+      fill: cloneFill(template.fill),
       stroke: { ...template.stroke },
       outerStroke: { ...template.outerStroke },
       shadow: { ...template.shadow },
-      background: { ...template.background },
+      background: cloneBackground(template.background),
       transform: { ...template.transform },
       characterScale: { ...template.characterScale },
-      partialStyles: template.partialStyles.map((style) => ({ ...style })),
-      position: template.includePosition && template.position ? { ...template.position } : object.position,
-    }));
-  },
+      partialStyles: template.partialStyles.map(clonePartialStyle),
+      position: template.includePosition && template.position ? { ...template.position } : existing.position,
+    };
+    return {
+      project: stampProject({
+        ...state.project,
+        palette: template.palette ? [...template.palette] : state.project.palette,
+        fontCatalog,
+        objects: state.project.objects.map((object) => object.id === id ? updated : object),
+      }),
+      past: pushHistory(state.past, state.transactionBase ?? state.project),
+      future: [],
+      transactionBase: null,
+    };
+  }),
 
   replaceProject: (project) =>
     set({
@@ -329,7 +373,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
   createNewProject: () =>
     set((state) => {
-      const project = createInitialProject();
+      const project = createInitialProject(state.project.palette, state.project.fontCatalog);
       return {
         project,
         selectedId: project.objects[0]?.id ?? null,
