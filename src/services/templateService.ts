@@ -1,5 +1,7 @@
 import { downloadTextFile, sanitizeFileName } from '@/src/services/download';
 import type { GraphicTextObject, GraphicTextTemplateV1 } from '@/src/types/editor';
+import { isFillStyle, isPartialTextStyle, isTextBackground } from '@/src/services/styleValidation';
+import { prepareBackgroundImage } from '@/src/services/textBackgroundAssets';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
@@ -61,9 +63,7 @@ const isTemplate = (value: unknown): value is GraphicTextTemplateV1 => {
   ) {
     return false;
   }
-  const fillIsValid = fill.type === 'solid'
-    ? isString(fill.color)
-    : fill.type === 'linear-gradient' && isFiniteNumber(fill.angle) && Array.isArray(fill.stops);
+  const fillIsValid = isFillStyle(fill);
   return (
     fillIsValid &&
     isString(typography.fontFamily) &&
@@ -84,7 +84,7 @@ const isTemplate = (value: unknown): value is GraphicTextTemplateV1 => {
     isFiniteNumber(shadow.opacity) &&
     isFiniteNumber(shadow.offsetX) &&
     isFiniteNumber(shadow.offsetY) &&
-    background.type === 'rough-band' &&
+    isTextBackground(background) &&
     isString(background.color) &&
     typeof background.enabled === 'boolean' &&
     isFiniteNumber(background.rotation) &&
@@ -100,11 +100,13 @@ const isTemplate = (value: unknown): value is GraphicTextTemplateV1 => {
     isFiniteNumber(characterScale.katakana) &&
     isFiniteNumber(characterScale.latin) &&
     isFiniteNumber(characterScale.number) &&
-    Array.isArray(value.partialStyles)
+    Array.isArray(value.partialStyles) && value.partialStyles.every(isPartialTextStyle) &&
+    (!value.includePosition || (isRecord(value.position) && isFiniteNumber(value.position.x) && isFiniteNumber(value.position.y)))
   );
 };
 
 export const readTemplateFile = async (file: File): Promise<GraphicTextTemplateV1> => {
+  if (file.size > 30 * 1024 * 1024) throw new Error('テンプレートは30MB以内にしてください。');
   let parsed: unknown;
   try {
     parsed = JSON.parse(await file.text());
@@ -114,5 +116,6 @@ export const readTemplateFile = async (file: File): Promise<GraphicTextTemplateV
   if (!isTemplate(parsed)) {
     throw new Error('Text Graphic Studioのテンプレート形式ではありません。');
   }
+  if (parsed.background.image) await prepareBackgroundImage(parsed.background.image);
   return parsed;
 };

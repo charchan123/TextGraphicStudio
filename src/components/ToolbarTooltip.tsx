@@ -40,7 +40,7 @@ export function ToolbarTooltip({ label, children }: ToolbarTooltipProps) {
         window.innerWidth - tooltipHalfWidth - viewportMargin,
         Math.max(tooltipHalfWidth + viewportMargin, rect.left + rect.width / 2),
       ),
-      top: rect.bottom + 8,
+      top: Math.min(rect.bottom + 8, window.innerHeight - 64),
     });
   }, []);
 

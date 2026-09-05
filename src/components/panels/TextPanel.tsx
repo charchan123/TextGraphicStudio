@@ -10,6 +10,8 @@ import { FONT_OPTIONS } from '@/src/constants/editor';
 import { SegmentedControl } from '@/src/components/controls/SegmentedControl';
 import { SliderField } from '@/src/components/controls/SliderField';
 import { SelectionEmpty } from '@/src/components/panels/SelectionEmpty';
+import { PartialStyleEditor } from '@/src/components/panels/PartialStyleEditor';
+import { adjustRangesForTextEdit } from '@/src/services/partialStyles';
 import { useObjectEditor } from '@/src/hooks/useObjectEditor';
 import { useEditorStore } from '@/src/store/editorStore';
 import type { TextAlignment } from '@/src/types/editor';
@@ -22,6 +24,7 @@ const ALIGN_OPTIONS: Array<{ value: TextAlignment; label: string }> = [
 
 export function TextPanel() {
   const [newText, setNewText] = useState('新しいタイトル');
+  const [range, setRange] = useState({ id: '', text: '', start: 0, end: 0 });
   const project = useEditorStore((state) => state.project);
   const selectedId = useEditorStore((state) => state.selectedId);
   const addGraphic = useEditorStore((state) => state.addGraphic);
@@ -72,11 +75,13 @@ export function TextPanel() {
               aria-label="選択中のテキスト内容"
               onFocus={editor.begin}
               onChange={(event) => {
-                const text = event.currentTarget.value;
-                editor.preview((object) => ({ ...object, text }));
+                const text = event.currentTarget.value.replace(/\r\n?/g, '\n');
+                editor.preview((object) => ({ ...object, text, partialStyles: adjustRangesForTextEdit(object.text, text, object.partialStyles) }));
               }}
+              onSelect={(event) => setRange({ id: selected.id, text: selected.text, start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd })}
               onBlur={editor.finish}
             />
+            <PartialStyleEditor key={selected.id} selected={selected} start={range.id === selected.id && range.text === selected.text ? range.start : 0} end={range.id === selected.id && range.text === selected.text ? range.end : 0} />
           </section>
 
           <section className="panel-section">

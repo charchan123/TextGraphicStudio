@@ -87,6 +87,27 @@ button, input, textarea, select { font: inherit; }
 .inspector-tabs { height: 100%; gap: 0; }
 .inspector-tablist { width: 100%; height: 52px !important; display: grid !important; grid-template-columns: repeat(5, 1fr); gap: 3px !important; padding: 7px 8px !important; border-bottom: 1px solid #dfe3ea; background: #f3f5f8 !important; }
 .inspector-tablist button { min-width: 0; padding-inline: 3px; font-size: 11px; }
+.inspector-tablist button { font-size: 12px; }
+.inspector-tab { gap: 5px !important; }
+.inspector-tab[data-active] { box-shadow: 0 1px 4px rgb(22 34 55 / 10%), inset 0 -3px #3469d4 !important; }
+.partial-style-editor { margin-top: 14px; padding: 12px; border: 1px solid #d9e0ec; border-radius: 8px; background: #f7f9fc; }
+.partial-style-editor summary { cursor: pointer; color: #284b81; font-size: 13px; font-weight: 700; }
+.range-selection { padding: 9px; margin-block: 10px; border-left: 3px solid #3972f4; background: #eaf0fb; color: #30476c; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.inline-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-block: 10px; }
+.inline-actions button { flex: 1; padding-inline: 8px; font-size: 12px; }
+.range-reset { width: 100%; font-size: 12px; }
+.plain-input { width: 100%; border: 1px solid #cdd4de; border-radius: 6px; padding: 8px 10px; background: white; font-size: 13px; }
+.background-upload { display: grid; gap: 8px; margin-block: 12px; }
+.text-background-preview { padding: 10px; border-radius: 8px; background: repeating-conic-gradient(#e1e5ec 0% 25%, #fff 0% 50%) 0 0 / 16px 16px; }
+.text-background-preview img { display: block; max-width: 100%; max-height: 95px; margin: auto; object-fit: contain; }
+.text-background-preview span { display: block; background: #ffffffdf; margin-top: 8px; padding: 4px; font-size: 12px; overflow-wrap: anywhere; }
+.background-presets { display: grid; gap: 10px; border-top: 1px solid #e1e6ee; margin-top: 18px; padding-top: 16px; }
+.background-presets h3 { font-size: 13px; font-weight: 700; }
+.social-guide-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 4; overflow: hidden; }
+.social-guide-overlay * { pointer-events: none; }
+.social-guide-area { position: absolute; background: rgb(218 79 95 / 14%); border: 1px dashed rgb(171 55 74 / 35%); display: flex; align-items: center; justify-content: center; }
+.social-guide-area span { color: rgb(126 36 57 / 65%); font-size: 11px; writing-mode: horizontal-tb; }
+.social-guide-title { position: absolute; left: 7px; top: 7px; color: #9a3d53; background: #fff9; border-radius: 3px; padding: 3px 5px; font-size: 11px; }
 .inspector-tab { height: 36px !important; gap: 4px !important; border: 1px solid transparent !important; border-radius: 6px !important; color: #687386 !important; font-weight: 650 !important; transition: color .15s ease, background-color .15s ease, border-color .15s ease, box-shadow .15s ease !important; }
 .inspector-tab::after { display: none !important; }
 .inspector-tab svg { width: 14px !important; height: 14px !important; color: #7a8597; transition: color .15s ease; }
@@ -128,6 +149,8 @@ button, input, textarea, select { font: inherit; }
 .toolbar-export button { min-height: 38px; }
 .toolbar-divider { width: 1px; height: 24px; margin: 0 3px; background: #dfe3ea; }
 .toolbar-tooltip-anchor { display: inline-flex; flex: 0 0 auto; }
+.export-button-stack .toolbar-tooltip-anchor, .export-button-stack .toolbar-tooltip-anchor button { width: 100%; }
+.export-button-stack button { white-space: normal; height: auto; min-height: 40px; padding-block: 10px; line-height: 1.5; }
 .toolbar-tooltip-bubble { position: fixed; z-index: 100; width: max-content; max-width: min(260px, calc(100vw - 24px)); transform: translateX(-50%); padding: 7px 10px; border: 1px solid rgb(255 255 255 / 14%); border-radius: 6px; background: #202939; color: #fff; box-shadow: 0 7px 20px rgb(12 20 35 / 24%); pointer-events: none; overflow-wrap: anywhere; text-align: center; white-space: normal; font-size: 12px; font-weight: 600; line-height: 1.35; animation: toolbar-tooltip-in .1s ease-out; }
 .toolbar-tooltip-bubble::before { position: absolute; left: 50%; top: -4px; width: 7px; height: 7px; transform: translateX(-50%) rotate(45deg); border-left: 1px solid rgb(255 255 255 / 14%); border-top: 1px solid rgb(255 255 255 / 14%); background: #202939; content: ''; }
 .toolbar-export [data-slot='native-select-wrapper'] { width: 176px; }

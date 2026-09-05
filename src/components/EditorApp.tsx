@@ -214,6 +214,7 @@ export function EditorApp() {
         onBackgroundFile={handleBackgroundFile}
         onExportProject={handleExportProject}
         onExportSelected={handleExportSelected}
+        onExportAll={handleExportAll}
         onSaveTemplate={handleSaveTemplate}
         onLoadTemplate={() => templateInputRef.current?.click()}
       />

@@ -17,6 +17,7 @@ import type {
 type ObjectUpdater = (object: GraphicTextObject) => GraphicTextObject;
 type LayerDirection = 'front' | 'forward' | 'backward' | 'back';
 type CanvasCenterMode = 'horizontal' | 'vertical' | 'both';
+type SocialGuide = NonNullable<ProjectDocument['canvas']['socialGuide']>;
 
 interface EditorState {
   project: ProjectDocument;
@@ -46,6 +47,7 @@ interface EditorState {
   setBackgroundImage: (image: BackgroundImageData | null) => void;
   setCanvasSize: (width: number, height: number, preset: CanvasPresetId) => void;
   toggleGuides: () => void;
+  setSocialGuide: (guide: SocialGuide) => void;
   applyTemplate: (template: GraphicTextTemplateV1) => void;
   replaceProject: (project: ProjectDocument) => void;
   createNewProject: () => void;
@@ -288,6 +290,13 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       future: [],
       transactionBase: null,
     })),
+
+  setSocialGuide: (socialGuide) => set((state) => ({
+    project: stampProject({ ...state.project, canvas: { ...state.project.canvas, socialGuide } }),
+    past: pushHistory(state.past, state.transactionBase ?? state.project),
+    future: [],
+    transactionBase: null,
+  })),
 
   applyTemplate: (template) => {
     const id = get().selectedId;

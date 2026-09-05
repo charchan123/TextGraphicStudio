@@ -4,7 +4,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, FabricImage, Group } from 'fabric';
 
 import { createFabricGraphicText } from '@/src/canvas/graphicTextRenderer';
+import { prepareGraphicAssets } from '@/src/services/textBackgroundAssets';
 import { GuideOverlay } from '@/src/canvas/GuideOverlay';
+import { SocialGuideOverlay } from '@/src/canvas/SocialGuideOverlay';
 import { useEditorStore } from '@/src/store/editorStore';
 
 interface DisplaySize {
@@ -120,6 +122,10 @@ export function FabricCanvas() {
   useEffect(() => {
     const canvas = canvasInstanceRef.current;
     if (!canvasReady || !canvas) return;
+    let cancelled = false;
+    const rebuild = async () => {
+    await prepareGraphicAssets(project.objects);
+    if (cancelled) return;
     const desiredSelectedId = useEditorStore.getState().selectedId;
     const previousGroups = [...groupMapRef.current.values()];
     canvas.discardActiveObject();
@@ -149,12 +155,20 @@ export function FabricCanvas() {
     if (activeGroup) canvas.setActiveObject(activeGroup);
     else if (desiredSelectedId) useEditorStore.getState().selectObject(desiredSelectedId);
     canvas.requestRenderAll();
+    };
+    void rebuild().catch((error: unknown) => {
+      if (!cancelled) useEditorStore.getState().setNotice(error instanceof Error ? error.message : 'テキスト背景を表示できませんでした。', 'error');
+    });
+    return () => { cancelled = true; };
   }, [canvasReady, project.objects]);
 
   useEffect(() => {
     const canvas = canvasInstanceRef.current;
     if (!canvasReady || !canvas) return;
     const activeGroup = selectedId ? groupMapRef.current.get(selectedId) : undefined;
+    // A new selection can arrive before its image-backed group is prepared.
+    // Do not clear the store selection while the asynchronous rebuild is pending.
+    if (selectedId && !activeGroup) return;
     if (activeGroup) {
       if (canvas.getActiveObject() !== activeGroup) canvas.setActiveObject(activeGroup);
     } else if (canvas.getActiveObject()) {
@@ -214,6 +228,7 @@ export function FabricCanvas() {
       >
         <canvas ref={canvasElementRef} aria-label="テキストグラフィック編集キャンバス" />
         <GuideOverlay visible={project.canvas.guidesVisible} />
+        <SocialGuideOverlay guide={project.canvas.socialGuide} />
       </div>
     </div>
   );

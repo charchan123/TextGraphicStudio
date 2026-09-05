@@ -42,7 +42,7 @@ export const DEFAULT_GRAPHIC_TEXT_PRESET: GraphicTextPreset = {
   },
   background: {
     enabled: true,
-    type: 'rough-band',
+    type: 'generatedRoughYellow',
     color: '#F4D507',
     rotation: -1.5,
     paddingX: 38,

@@ -352,7 +352,7 @@ try {
   await capture('phase1-1-05-layer-operation.jpg');
 
   await page.getByRole('tab', { name: '出力' }).click();
-  const templateBuffer = await downloadFrom(page.getByRole('button', { name: '選択中の設定を保存' }), 'phase1-template.json');
+  const templateBuffer = await downloadFrom(toolbar.getByRole('button', { name: '選択中の設定をテンプレート保存' }), 'phase1-template.json');
   const template = JSON.parse(templateBuffer.toString('utf8'));
   assert.equal(template.kind, 'text-graphic-studio-template');
   assert.equal(template.schemaVersion, 1);
@@ -411,10 +411,10 @@ try {
   mark('横長背景の左右中央クロップ・背景削除');
 
   await capture('phase1-1-07-transparent-before.jpg');
-  const fullPng = await downloadFrom(toolbar.getByRole('button', { name: 'PNG保存' }), 'phase1-full.png');
+  const fullPng = await downloadFrom(toolbar.getByRole('button', { name: 'キャンバス全体をPNG保存' }), 'phase1-full.png');
   const fullInfo = parsePng(fullPng);
   assert.deepEqual({ width: fullInfo.width, height: fullInfo.height }, { width: 1920, height: 1080 });
-  const transparentPng = await downloadFrom(toolbar.getByRole('button', { name: '透明PNG' }), 'phase1-transparent.png');
+  const transparentPng = await downloadFrom(toolbar.getByRole('button', { name: '選択中のテキストを透明PNG保存' }), 'phase1-transparent.png');
   const transparentInfo = readCornerAlpha(transparentPng);
   assert.ok(transparentInfo.alphas.every((alpha) => alpha === 0), 'Transparent PNG corners must be transparent');
   assert.ok(transparentInfo.dimensions.width < 1920 && transparentInfo.dimensions.height < 1080, 'Transparent export should be tightly cropped');
@@ -426,7 +426,7 @@ try {
   const batchDownloads = [];
   const collectDownload = (download) => batchDownloads.push(download);
   page.on('download', collectDownload);
-  await page.getByRole('button', { name: 'すべてを個別に透明PNG保存' }).click();
+  await toolbar.getByRole('button', { name: 'すべてを個別に透明PNG保存' }).click();
   await delay(1400);
   page.off('download', collectDownload);
   assert.equal(batchDownloads.length, 3);
@@ -502,10 +502,10 @@ try {
     ['やり直す', 'やり直す（Ctrl+Shift+Z / Ctrl+Y）'],
     ['複製', '選択中のテキストを複製（Ctrl+D）'],
     ['削除', '選択中のテキストを削除（Delete）'],
-    ['テンプレート読込', 'テンプレートを読み込む（JSON）'],
-    ['テンプレート', '選択中の設定をテンプレート保存'],
-    ['透明PNG', '選択中のテキストをダウンロード（透明PNG）'],
-    ['PNG保存', 'キャンバス画像をダウンロード（PNG）'],
+    ['テンプレートJSONを読み込む', 'テンプレートJSONを読み込む'],
+    ['選択中の設定をテンプレート保存', '選択中の設定をテンプレート保存'],
+    ['選択中のテキストを透明PNG保存', '選択中のテキストを透明PNG保存'],
+    ['キャンバス全体をPNG保存', 'キャンバス全体をPNG保存'],
   ];
   for (const [buttonName, tooltipText] of tooltipCases) {
     const anchor = toolbar.getByRole('button', { name: buttonName, exact: true }).locator('xpath=..');

@@ -1,10 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Download, FileJson, FolderDown, ImageDown, Upload } from 'lucide-react';
-
-import { Button } from '@/components/ui/button';
+import { EditorActionButton } from '@/src/components/EditorActionButton';
 import { Checkbox } from '@/components/ui/checkbox';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import { SOCIAL_GUIDES, type SocialPlatform } from '@/src/constants/socialGuides';
 import { ToggleRow } from '@/src/components/controls/ToggleRow';
 import { useEditorStore } from '@/src/store/editorStore';
 
@@ -29,6 +29,8 @@ export function ExportPanel({
   const project = useEditorStore((state) => state.project);
   const selectedId = useEditorStore((state) => state.selectedId);
   const toggleGuides = useEditorStore((state) => state.toggleGuides);
+  const setSocialGuide = useEditorStore((state) => state.setSocialGuide);
+  const guide = project.canvas.socialGuide ?? { enabled: false, platform: 'instagram-reels' as const };
   const hasSelection = project.objects.some((object) => object.id === selectedId);
 
   return (
@@ -41,17 +43,11 @@ export function ExportPanel({
           </div>
         </div>
         <div className="export-button-stack">
-          <Button size="lg" disabled={busy} onClick={onExportProject}>
-            <Download aria-hidden="true" />キャンバス全体をPNG保存
-          </Button>
-          <Button variant="outline" size="lg" disabled={busy || !hasSelection} onClick={onExportSelected}>
-            <ImageDown aria-hidden="true" />選択中を透明PNG保存
-          </Button>
-          <Button variant="outline" size="lg" disabled={busy || project.objects.length === 0} onClick={onExportAll}>
-            <FolderDown aria-hidden="true" />すべてを個別に透明PNG保存
-          </Button>
+          <EditorActionButton action="exportProject" size="lg" disabled={busy} onClick={onExportProject} />
+          <EditorActionButton action="exportSelected" variant="outline" size="lg" disabled={busy || !hasSelection} onClick={onExportSelected} />
+          <EditorActionButton action="exportAll" variant="outline" size="lg" disabled={busy || project.objects.length === 0} onClick={onExportAll} />
         </div>
-        <p className="panel-note">透明PNGにはキャンバス背景画像を含めません。フチ・影・黄色背景は一緒に保存されます。</p>
+        <p className="panel-note">透明PNGにはフチ・影・テキスト背景を含めます。キャンバス背景画像とガイドは含めません。</p>
       </section>
 
       <section className="panel-section">
@@ -65,12 +61,8 @@ export function ExportPanel({
           <label htmlFor="template-include-position">位置情報もテンプレートに含める</label>
         </div>
         <div className="export-button-stack compact">
-          <Button variant="outline" disabled={!hasSelection} onClick={() => onSaveTemplate(includePosition)}>
-            <FileJson aria-hidden="true" />選択中の設定を保存
-          </Button>
-          <Button variant="outline" disabled={!hasSelection} onClick={onLoadTemplate}>
-            <Upload aria-hidden="true" />JSONを読み込んで適用
-          </Button>
+          <EditorActionButton action="templateSave" variant="outline" disabled={!hasSelection} onClick={() => onSaveTemplate(includePosition)} />
+          <EditorActionButton action="templateLoad" variant="outline" disabled={!hasSelection} onClick={onLoadTemplate} />
         </div>
       </section>
 
@@ -82,6 +74,11 @@ export function ExportPanel({
           checked={project.canvas.guidesVisible}
           onCheckedChange={toggleGuides}
         />
+        <ToggleRow label="SNS配置ガイドを表示" description="色付き領域は配置を避ける目安です" checked={guide.enabled} onCheckedChange={(enabled) => setSocialGuide({ ...guide, enabled })} />
+        <NativeSelect aria-label="SNSガイドの種類" value={guide.platform} onChange={(event) => setSocialGuide({ ...guide, platform: event.currentTarget.value as SocialPlatform })}>
+          {Object.entries(SOCIAL_GUIDES).map(([value, definition]) => <NativeSelectOption key={value} value={value}>{definition.label}</NativeSelectOption>)}
+        </NativeSelect>
+        <p className="panel-note">{SOCIAL_GUIDES[guide.platform]?.note}。表示領域は端末・投稿形式で変わります。公式の保証範囲ではありません。ガイドはPNGには含まれません。</p>
       </section>
 
       <section className="privacy-card">

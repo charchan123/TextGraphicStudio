@@ -3,13 +3,9 @@
 import { useRef } from 'react';
 import {
   Copy,
-  FileDown,
-  FileJson,
   FilePlus2,
-  ImageDown,
   ImagePlus,
   Redo2,
-  Save,
   Trash2,
   Undo2,
 } from 'lucide-react';
@@ -17,6 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { CanvasSizeControl } from '@/src/components/CanvasSizeControl';
 import { ToolbarTooltip } from '@/src/components/ToolbarTooltip';
+import { EditorActionButton } from '@/src/components/EditorActionButton';
 import { useEditorStore } from '@/src/store/editorStore';
 
 interface EditorToolbarProps {
@@ -25,6 +22,7 @@ interface EditorToolbarProps {
   onBackgroundFile: (file: File) => void;
   onExportProject: () => void;
   onExportSelected: () => void;
+  onExportAll: () => void;
   onSaveTemplate: (includePosition: boolean) => void;
   onLoadTemplate: () => void;
 }
@@ -35,6 +33,7 @@ export function EditorToolbar({
   onBackgroundFile,
   onExportProject,
   onExportSelected,
+  onExportAll,
   onSaveTemplate,
   onLoadTemplate,
 }: EditorToolbarProps) {
@@ -107,26 +106,11 @@ export function EditorToolbar({
 
       <div className="toolbar-export">
         <CanvasSizeControl />
-        <ToolbarTooltip label="テンプレートを読み込む（JSON）">
-          <Button variant="ghost" size="icon-lg" aria-label="テンプレート読込" disabled={!hasSelection} onClick={onLoadTemplate}>
-            <FileJson aria-hidden="true" /><span className="sr-only">テンプレート読込</span>
-          </Button>
-        </ToolbarTooltip>
-        <ToolbarTooltip label="選択中の設定をテンプレート保存">
-          <Button variant="outline" size="lg" aria-label="テンプレート" disabled={!hasSelection} onClick={() => onSaveTemplate(false)}>
-            <Save aria-hidden="true" /><span>テンプレート</span>
-          </Button>
-        </ToolbarTooltip>
-        <ToolbarTooltip label="選択中のテキストをダウンロード（透明PNG）">
-          <Button variant="outline" size="lg" aria-label="透明PNG" disabled={busy || !hasSelection} onClick={onExportSelected}>
-            <FileDown aria-hidden="true" /><span>透明PNG</span>
-          </Button>
-        </ToolbarTooltip>
-        <ToolbarTooltip label="キャンバス画像をダウンロード（PNG）">
-          <Button size="lg" aria-label="PNG保存" disabled={busy} onClick={onExportProject}>
-            <ImageDown aria-hidden="true" /><span>PNG保存</span>
-          </Button>
-        </ToolbarTooltip>
+        <EditorActionButton action="templateLoad" iconOnly variant="ghost" size="icon-lg" disabled={!hasSelection} onClick={onLoadTemplate} />
+        <EditorActionButton action="templateSave" iconOnly variant="outline" size="icon-lg" disabled={!hasSelection} onClick={() => onSaveTemplate(false)} />
+        <EditorActionButton action="exportSelected" iconOnly variant="outline" size="icon-lg" disabled={busy || !hasSelection} onClick={onExportSelected} />
+        <EditorActionButton action="exportAll" iconOnly variant="outline" size="icon-lg" disabled={busy || project.objects.length === 0} onClick={onExportAll} />
+        <EditorActionButton action="exportProject" iconOnly size="icon-lg" disabled={busy} onClick={onExportProject} />
       </div>
     </header>
   );

@@ -1,6 +1,7 @@
 import { FabricImage, StaticCanvas } from 'fabric';
 
 import { createFabricGraphicText } from '@/src/canvas/graphicTextRenderer';
+import { prepareGraphicAssets } from '@/src/services/textBackgroundAssets';
 import { downloadDataUrl, sanitizeFileName } from '@/src/services/download';
 import type { GraphicTextObject, ProjectDocument } from '@/src/types/editor';
 
@@ -66,6 +67,7 @@ const trimTransparentPixels = async (source: string, padding = 2): Promise<strin
 
 const renderGraphicDataUrl = async (object: GraphicTextObject): Promise<string> => {
   await waitForFonts();
+  await prepareGraphicAssets([object]);
   const rendered = createFabricGraphicText(object);
   const group = rendered.group;
   group.setCoords();
@@ -104,6 +106,7 @@ const renderGraphicDataUrl = async (object: GraphicTextObject): Promise<string> 
 
 const renderProjectDataUrl = async (project: ProjectDocument): Promise<string> => {
   await waitForFonts();
+  await prepareGraphicAssets(project.objects.filter((object) => object.visible));
   const surface = new StaticCanvas(document.createElement('canvas'), {
     width: project.canvas.width,
     height: project.canvas.height,

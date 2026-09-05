@@ -12,6 +12,7 @@
     "start": "wrangler dev --config dist/server/wrangler.json",
     "lint": "oxlint src app",
     "test:browser": "node scripts/phase1-browser-check.mjs",
+    "test:browser:phase2": "node scripts/phase2-browser-check.mjs",
     "format": "oxfmt"
   },
   "dependencies": {

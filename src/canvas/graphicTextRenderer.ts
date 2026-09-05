@@ -1,8 +1,9 @@
 /* oxlint-disable typescript/no-deprecated -- Fabric centers grouped children with the legacy origin options. */
-import { FabricText, Group, Polygon, Shadow, type FabricObject } from 'fabric';
+import { Group, Shadow, type FabricObject } from 'fabric';
 
 import { resolveFontStack } from '@/src/constants/editor';
-import { createRoughBandPoints } from '@/src/canvas/roughBand';
+import { createTextBackground } from '@/src/canvas/backgroundRenderer';
+import { applyTextRanges, StyledGraphicText } from '@/src/canvas/StyledGraphicText';
 import type { GraphicTextObject } from '@/src/types/editor';
 
 export interface RenderedGraphicText {
@@ -31,8 +32,8 @@ const createTextLayer = (
   stroke: string | undefined,
   strokeWidth: number,
   shadow: Shadow | undefined,
-): FabricText =>
-  new FabricText(model.text || ' ', {
+): StyledGraphicText => {
+  const text = new StyledGraphicText(model.text.replace(/\r\n?/g, '\n') || ' ', {
     left: 0,
     top: 0,
     originX: 'center',
@@ -53,6 +54,9 @@ const createTextLayer = (
     evented: false,
     objectCaching: false,
   });
+  applyTextRanges(text, model);
+  return text;
+};
 
 export const createFabricGraphicText = (model: GraphicTextObject): RenderedGraphicText => {
   const children: FabricObject[] = [];
@@ -69,25 +73,8 @@ export const createFabricGraphicText = (model: GraphicTextObject): RenderedGraph
   const textWidth = Math.max(1, measurementText.width);
   const textHeight = Math.max(1, measurementText.height);
 
-  if (model.background.enabled) {
-    const bandWidth = textWidth + model.background.paddingX * 2;
-    const bandHeight = textHeight + model.background.paddingY * 2;
-    const polygon = new Polygon(
-      createRoughBandPoints(bandWidth, bandHeight, model.background.roughness, model.background.seed),
-      {
-        left: 0,
-        top: 0,
-        originX: 'center',
-        originY: 'center',
-        angle: model.background.rotation,
-        fill: model.background.color,
-        selectable: false,
-        evented: false,
-        objectCaching: false,
-      },
-    );
-    children.push(polygon);
-  }
+  const background = createTextBackground(model.background, textWidth, textHeight);
+  if (background) children.push(background);
 
   const whiteWidth = model.stroke.enabled ? model.stroke.width : 0;
   const blackWidth = model.outerStroke.enabled ? model.outerStroke.width : 0;

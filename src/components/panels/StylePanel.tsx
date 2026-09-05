@@ -6,6 +6,7 @@ import { ToggleRow } from '@/src/components/controls/ToggleRow';
 import { SelectionEmpty } from '@/src/components/panels/SelectionEmpty';
 import { useObjectEditor } from '@/src/hooks/useObjectEditor';
 import { useEditorStore } from '@/src/store/editorStore';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 
 export function StylePanel() {
   const project = useEditorStore((state) => state.project);
@@ -25,6 +26,15 @@ export function StylePanel() {
             <p>文字本体の塗り色</p>
           </div>
         </div>
+        <label className="field-label" htmlFor="text-fill-type">文字の塗り</label>
+        <NativeSelect id="text-fill-type" value={selected.fill.type} onChange={(event) => {
+          const type = event.currentTarget.value;
+          editor.commit((object) => ({ ...object, fill: type === 'solid' ? { type: 'solid', color: object.fill.type === 'solid' ? object.fill.color : object.fill.stops[0]?.color ?? '#000000' } : { type: 'linear-gradient', angle: 90, stops: [{ offset: 0, color: '#FFF000' }, { offset: 1, color: '#FF8500' }] } }));
+        }}>
+          <NativeSelectOption value="solid">単色</NativeSelectOption>
+          <NativeSelectOption value="linear-gradient">線形グラデーション</NativeSelectOption>
+        </NativeSelect>
+        {selected.fill.type === 'solid' ?
         <ColorField
           label="文字色"
           value={fillColor}
@@ -32,6 +42,11 @@ export function StylePanel() {
           onPreview={(color) => editor.preview((object) => ({ ...object, fill: { type: 'solid', color } }))}
           onCommit={editor.finish}
         />
+        : <>
+          {[{ index: 0, label: '開始色' }, { index: selected.fill.stops.length - 1, label: '終了色' }].map(({ index, label }) => <ColorField key={label} label={label} value={selected.fill.type === 'linear-gradient' ? selected.fill.stops[index].color : '#000000'} onBegin={editor.begin} onPreview={(color) => editor.preview((object) => object.fill.type === 'linear-gradient' ? { ...object, fill: { ...object.fill, stops: object.fill.stops.map((stop, stopIndex) => stopIndex === index ? { ...stop, color } : stop) } } : object)} onCommit={editor.finish} />)}
+          <SliderField label="グラデーション角度" value={selected.fill.angle} min={-180} max={180} step={0.1} unit="°" onBegin={editor.begin} onPreview={(angle) => editor.preview((object) => object.fill.type === 'linear-gradient' ? { ...object, fill: { ...object.fill, angle } } : object)} onCommit={editor.finish} />
+          <p className="panel-note">0°は左から右、90°は上から下。部分指定した文字色が優先されます。</p>
+        </>}
       </section>
 
       <section className="panel-section">

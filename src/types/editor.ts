@@ -58,20 +58,43 @@ export interface ShadowStyle {
 
 export interface RoughBandStyle {
   enabled: boolean;
-  type: 'rough-band';
+  /** rough-band remains readable for Phase 1 templates. */
+  type: 'rough-band' | 'none' | 'generatedRoughYellow' | 'uploadedImage';
   color: string;
   rotation: number;
   paddingX: number;
   paddingY: number;
   roughness: number;
   seed: number;
+  image?: TextBackgroundImage;
+}
+
+export interface TextBackgroundImage {
+  id: string;
+  fileName: string;
+  sourceMimeType: 'image/png' | 'image/svg+xml';
+  /** Self-contained PNG, locally rasterized when the source was SVG. */
+  dataUrl: string;
+  width: number;
+  height: number;
+}
+
+export interface BackgroundPreset {
+  id: string;
+  name: string;
+  savedAt: string;
+  background: RoughBandStyle;
 }
 
 export interface PartialTextStyle {
+  /** UTF-16 offsets matching textarea selectionStart / selectionEnd. */
   start: number;
   end: number;
   fill?: FillStyle;
   fontScale?: number;
+  fontSize?: number;
+  letterSpacing?: number;
+  fontWeight?: 400 | 700 | 900;
 }
 
 export interface GraphicTextObject {
@@ -105,6 +128,7 @@ export interface CanvasSettings {
   height: number;
   preset: CanvasPresetId;
   guidesVisible: boolean;
+  socialGuide?: { enabled: boolean; platform: 'instagram-reels' | 'threads' | 'youtube-shorts' | 'x' };
 }
 
 export interface BackgroundImageData {
