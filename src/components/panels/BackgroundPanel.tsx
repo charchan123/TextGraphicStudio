@@ -109,6 +109,7 @@ export function BackgroundPanel() {
             value={selected.background.rotation}
             min={-45}
             max={45}
+            step={0.1}
             unit="°"
             disabled={!selected.background.enabled}
             onBegin={editor.begin}

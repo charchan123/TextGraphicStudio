@@ -1,5 +1,7 @@
 'use client';
 
+import { useRef, useState } from 'react';
+
 import { Slider } from '@/components/ui/slider';
 
 interface SliderFieldProps {
@@ -18,6 +20,10 @@ interface SliderFieldProps {
 const readSliderValue = (value: number | readonly number[]): number =>
   typeof value === 'number' ? value : value[0] ?? 0;
 
+const numericDraftPattern = /^-?(?:\d+)?(?:\.\d*)?$/;
+
+const formatValue = (value: number): string => String(value);
+
 export function SliderField({
   label,
   value,
@@ -31,22 +37,86 @@ export function SliderField({
   onCommit,
 }: SliderFieldProps) {
   const clamp = (nextValue: number) => Math.min(max, Math.max(min, nextValue));
+  const [draft, setDraft] = useState<string | null>(null);
+  const draftRef = useRef<string | null>(null);
+  const editStartValueRef = useRef(value);
+  const cancelNextBlurRef = useRef(false);
+  const displayedValue = draft ?? formatValue(value);
+
+  const updateDraft = (nextDraft: string) => {
+    draftRef.current = nextDraft;
+    setDraft(nextDraft);
+  };
+
+  const stopEditing = () => {
+    draftRef.current = null;
+    setDraft(null);
+  };
+
+  const commitDraft = () => {
+    const currentDraft = draftRef.current;
+    const parsed = currentDraft === null || currentDraft === '' ? Number.NaN : Number(currentDraft);
+    if (!Number.isFinite(parsed)) {
+      stopEditing();
+      onCommit();
+      return;
+    }
+
+    const nextValue = clamp(parsed);
+    stopEditing();
+    onPreview(nextValue);
+    onCommit();
+  };
+
   return (
     <div className="slider-field">
       <div className="control-row">
         <label>{label}</label>
         <div className="number-with-unit">
           <input
-            type="number"
-            value={Number.isInteger(step) ? Math.round(value) : value}
-            min={min}
-            max={max}
-            step={step}
+            type="text"
+            inputMode="decimal"
+            role="spinbutton"
+            value={displayedValue}
+            aria-valuemin={min}
+            aria-valuemax={max}
+            aria-valuenow={
+              Number.isFinite(Number(displayedValue)) && displayedValue !== ''
+                ? Number(displayedValue)
+                : undefined
+            }
             disabled={disabled}
             aria-label={`${label}の数値`}
-            onFocus={onBegin}
-            onChange={(event) => onPreview(clamp(event.currentTarget.valueAsNumber || 0))}
-            onBlur={onCommit}
+            onFocus={() => {
+              editStartValueRef.current = value;
+              cancelNextBlurRef.current = false;
+              updateDraft(formatValue(value));
+              onBegin();
+            }}
+            onChange={(event) => {
+              const nextDraft = event.currentTarget.value;
+              if (numericDraftPattern.test(nextDraft)) updateDraft(nextDraft);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                event.currentTarget.blur();
+              } else if (event.key === 'Escape') {
+                event.preventDefault();
+                cancelNextBlurRef.current = true;
+                updateDraft(formatValue(editStartValueRef.current));
+                event.currentTarget.blur();
+              }
+            }}
+            onBlur={() => {
+              if (cancelNextBlurRef.current) {
+                cancelNextBlurRef.current = false;
+                stopEditing();
+                onCommit();
+                return;
+              }
+              commitDraft();
+            }}
           />
           {unit && <span>{unit}</span>}
         </div>

@@ -205,6 +205,8 @@ export function EditorApp() {
       data-selected-scale-x={selected?.transform.scaleX ?? ''}
       data-selected-scale-y={selected?.transform.scaleY ?? ''}
       data-selected-rotation={selected?.transform.rotation ?? ''}
+      data-selected-background-rotation={selected?.background.rotation ?? ''}
+      data-selected-shadow-opacity={selected?.shadow.opacity ?? ''}
     >
       <EditorToolbar
         busy={busy}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Bold, Plus } from 'lucide-react';
+import { Bold, Focus, MoveHorizontal, MoveVertical, Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
@@ -25,6 +25,7 @@ export function TextPanel() {
   const project = useEditorStore((state) => state.project);
   const selectedId = useEditorStore((state) => state.selectedId);
   const addGraphic = useEditorStore((state) => state.addGraphic);
+  const centerSelectedOnCanvas = useEditorStore((state) => state.centerSelectedOnCanvas);
   const selected = project.objects.find((object) => object.id === selectedId) ?? null;
   const editor = useObjectEditor(selectedId);
 
@@ -76,6 +77,48 @@ export function TextPanel() {
               }}
               onBlur={editor.finish}
             />
+          </section>
+
+          <section className="panel-section">
+            <h2>キャンバス中央揃え</h2>
+            <fieldset
+              className="grid grid-cols-3 gap-2"
+              aria-label="キャンバス中央揃え"
+            >
+              <Button
+                type="button"
+                variant="outline"
+                className="h-auto min-w-0 flex-col gap-1 px-1 py-2 text-xs"
+                aria-label="水平方向中央"
+                disabled={selected.locked}
+                onClick={() => centerSelectedOnCanvas('horizontal')}
+              >
+                <MoveHorizontal aria-hidden="true" />
+                水平中央
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-auto min-w-0 flex-col gap-1 px-1 py-2 text-xs"
+                aria-label="垂直方向中央"
+                disabled={selected.locked}
+                onClick={() => centerSelectedOnCanvas('vertical')}
+              >
+                <MoveVertical aria-hidden="true" />
+                垂直中央
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-auto min-w-0 flex-col gap-1 px-1 py-2 text-xs"
+                aria-label="完全中央"
+                disabled={selected.locked}
+                onClick={() => centerSelectedOnCanvas('both')}
+              >
+                <Focus aria-hidden="true" />
+                完全中央
+              </Button>
+            </fieldset>
           </section>
 
           <section className="panel-section">

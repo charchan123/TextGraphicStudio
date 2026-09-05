@@ -1,5 +1,7 @@
 'use client';
 
+import { Download, Image as ImageIcon, Layers3, Palette, Type } from 'lucide-react';
+
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BackgroundPanel } from '@/src/components/panels/BackgroundPanel';
 import { ExportPanel } from '@/src/components/panels/ExportPanel';
@@ -21,11 +23,26 @@ export function InspectorPanel(props: InspectorPanelProps) {
     <aside className="inspector" aria-label="コントロールパネル">
       <Tabs defaultValue="text" className="inspector-tabs">
         <TabsList variant="line" className="inspector-tablist">
-          <TabsTrigger value="text">テキスト</TabsTrigger>
-          <TabsTrigger value="style">スタイル</TabsTrigger>
-          <TabsTrigger value="background">背景</TabsTrigger>
-          <TabsTrigger value="layers">レイヤー</TabsTrigger>
-          <TabsTrigger value="export">出力</TabsTrigger>
+          <TabsTrigger value="text" className="inspector-tab">
+            <Type aria-hidden="true" />
+            <span>テキスト</span>
+          </TabsTrigger>
+          <TabsTrigger value="style" className="inspector-tab">
+            <Palette aria-hidden="true" />
+            <span>スタイル</span>
+          </TabsTrigger>
+          <TabsTrigger value="background" className="inspector-tab">
+            <ImageIcon aria-hidden="true" />
+            <span>背景</span>
+          </TabsTrigger>
+          <TabsTrigger value="layers" className="inspector-tab">
+            <Layers3 aria-hidden="true" />
+            <span>レイヤー</span>
+          </TabsTrigger>
+          <TabsTrigger value="export" className="inspector-tab">
+            <Download aria-hidden="true" />
+            <span>出力</span>
+          </TabsTrigger>
         </TabsList>
         <div className="inspector-scroll">
           <TabsContent value="text"><TextPanel /></TabsContent>

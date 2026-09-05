@@ -36,66 +36,6 @@ npm run test:browser
 
 `test:browser` はWindows標準のMicrosoft Edgeを利用し、主要な編集フロー、PNG寸法・透過、テンプレート、自動復元を実ブラウザで確認します。
 
-## Netlifyへの公開
-
-通常の npm run build は、Cloudflare Worker向けのVinext成果物を dist/client と dist/serverへ生成します。これは静的サイト用フォルダーではないため、distをNetlifyのDeploys画面へドラッグしてもトップページは動きません。
-
-Netlifyでは、Vinext公式のNitroアダプターを使う専用ビルドを実行します。
-
-~~~bash
-npm run build:netlify
-~~~
-
-このビルドは公開アセットを dist、SSR/RSC用の生成Functionを .netlify/functions-internalへ出力します。Functionはルート全体を処理し、静的アセットが存在する場合はそちらを優先します。
-
-### GitHub連携
-
-このフォルダーがまだGitHubにない場合は、先にGitHubでリポジトリを作成し、プロジェクト一式をcommit・pushしてください。その後、Netlifyの「Add new project」→「Import an existing project」からGitHubのリポジトリを選びます。
-
-ルートの netlify.toml に設定済みなので、Netlify管理画面では原則として値を追加・変更する必要はありません。確認する場合は次の値になっていることを確かめてください。`netlify.toml`の設定が管理画面より優先されます。
-
-| 項目 | 入力値 |
-| --- | --- |
-| Base directory | 空欄 |
-| Build command | npm run build:netlify |
-| Publish directory | dist |
-| Functions directory | 空欄 |
-| Node.js | 22.13.0 |
-| NITRO_PRESET | netlify |
-
-Build command、Publish directory、Base directoryは「Build settings」で確認します。Node.jsとNITRO_PRESETはビルド環境設定ですが、どちらも`netlify.toml`とnpmスクリプトで設定済みです。
-
-Functions directoryは空欄のままにします。Nitroが生成する .netlify/functions-internal はNetlifyが自動検出する内部成果物で、管理画面から手動指定するユーザーFunctionディレクトリではありません。`.netlify/functions-internal`をFunctions directoryへ入力しないでください。
-
-### 手動デプロイ
-
-この構成ではNetlify管理画面へのフォルダードラッグ＆ドロップを使用しません。ドラッグ＆ドロップではNitroのSSR Functionを一緒に処理できないためです。Netlify CLIを使うと、distと生成Functionの両方が正しくアップロードされます。
-
-先にNetlify管理画面で空のプロジェクトを作るか、GitHub連携でプロジェクトを作成してから、プロジェクト直下で次を実行します。`link`では、その既存Netlifyプロジェクトを選択します。Netlify CLI 27以降の`deploy`は、`--no-build`を付けない限り、`netlify.toml`のビルドを実行してから静的ファイルとFunctionをアップロードします。
-
-~~~powershell
-npx netlify-cli@27.0.1 login
-npx netlify-cli@27.0.1 link
-npx netlify-cli@27.0.1 deploy
-~~~
-
-最初の deploy は確認用URLへ公開します。動作確認後、本番URLへ反映します。
-
-~~~powershell
-npx netlify-cli@27.0.1 deploy --prod
-~~~
-
-### ローカルでNetlify相当を確認
-
-Netlify CLIの serve は、本番ビルド、Functionの梱包、ローカル配信をまとめて実行します。
-
-~~~powershell
-npx netlify-cli@27.0.1 serve
-~~~
-
-起動後、表示されたURL（通常は http://localhost:8888/）を開きます。
-このコマンドはファイル変更を監視しません。変更後は`Ctrl + C`で停止し、もう一度実行してください。
-
 ## 基本操作
 
 1. 上部の「背景画像」からPNG、JPG、JPEG、WEBPを選びます。
@@ -169,7 +109,6 @@ src/
   types/                   プロジェクト・テキスト・テンプレート型
 scripts/
   phase1-browser-check.mjs 実ブラウザのPhase 1回帰テスト
-netlify.toml               Netlify向けビルド・公開設定
 ```
 
 ## データ設計
@@ -193,8 +132,27 @@ netlify.toml               Netlify向けビルド・公開設定
 - 高さ基準配置を厳密に守るため、9:16画像を16:9キャンバスへ置くと左右に余白が生じます。左右クロップは、キャンバスより横長の画像で発生します。
 - 全テキストの個別保存では、ブラウザが「複数ファイルのダウンロード」許可を求める場合があります。ZIP化はPhase 5の対象です。
 - IndexedDBの保存容量と保持期間はブラウザ設定に依存します。プライベートブラウズやサイトデータ削除では復元できません。
-- VinextとNitroは現在ベータ版です。依存更新時は通常ビルドとNetlifyビルドの両方を再検証してください。
 
 ## プライバシー
 
 読み込んだ画像、テキスト、テンプレート、制作データは外部サーバーへアップロードしません。画像処理とPNG合成はFabric.jsとブラウザCanvasで完結し、自動保存は利用中ブラウザのIndexedDB内だけに保存します。
+
+
+
+●機能
+・テキストと黄色いテキスト背景を、キャンバスへ水平方向および垂直方向へ中央揃えできるボタンがほしい。
+・コントロールパネルの各値の初期値を見本のテキストと黄色いテキスト背景のデザインと同じ値にしたい。
+・キャンバスは初期値を縦長1080×1920にしたい。
+・テキストの色やサイズや文字間を、テキスト全体ではなく一部のテキストだけにも適用できるようにしたい。
+・テキストのグラデーション機能を実装したい。
+・テキストの影の濃さも調整できるようにしたい（ChatGPTと同様の認識だと思います）。
+・インスタリール、スレッズ、YouTube、Xのテキストと黄色いテキスト背景の非推奨配置エリア（各種アイコンなどと被るエリア）をキャンバス上で薄っすらでいいので表示したい。
+
+●見た目
+・黄色いテキスト背景のデザインを見本に近づけたい（ChatGPTと同様の認識だと思います）。
+・黄色いテキスト背景の「端のラフさ」をギザギザさの度合いにしたい（ChatGPTと同様の認識だと思います）。
+・「新規プロジェクト」のボタンが更新のマークになっていてわかりにくいので、「＋」などのボタンにしたい。
+・「テンプレートJSONを読み込む」のボタンがアップロードの上矢印マークになっていてわかりにくいので、JSONのファイルのような見た目のボタンにしたい。
+・「選択中の設定をテンプレート保存」のボタンは、フロッピーのような見た目のボタンにしたい。
+・「選択中の設定をテンプレート保存」の右隣りの選択中のテキストと黄色いテキスト背景をダウンロードのボタンが、「背景画像を読み込む」ボタンとまったく同じで紛らわしいので、1ファイルだけダウンロード（↓）とわかるボタンにしたい。またカーソルを重ねたときにポップアップで「選択中のテキストをダウンロード」のような表示を出るようにしたい。
+・「選択中の設定をテンプレート保存」の2つ右隣りのキャンバスを画像としてダウンロードのボタンを、キャンバス画像をダウンロードするボタンだとわかる見た目にしたい。またカーソルを重ねたときにポップアップで「キャンバス画像をダウンロード」のような表示を出るようにしたい。

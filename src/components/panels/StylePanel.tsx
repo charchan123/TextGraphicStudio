@@ -133,6 +133,20 @@ export function StylePanel() {
           onCommit={editor.finish}
         />
         <SliderField
+          label="影の濃さ"
+          value={selected.shadow.opacity * 100}
+          min={0}
+          max={100}
+          unit="%"
+          disabled={!selected.shadow.enabled}
+          onBegin={editor.begin}
+          onPreview={(opacity) => editor.preview((object) => ({
+            ...object,
+            shadow: { ...object.shadow, opacity: opacity / 100 },
+          }))}
+          onCommit={editor.finish}
+        />
+        <SliderField
           label="影のぼかし"
           value={selected.shadow.blur}
           min={0}

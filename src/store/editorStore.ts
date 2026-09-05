@@ -16,6 +16,7 @@ import type {
 
 type ObjectUpdater = (object: GraphicTextObject) => GraphicTextObject;
 type LayerDirection = 'front' | 'forward' | 'backward' | 'back';
+type CanvasCenterMode = 'horizontal' | 'vertical' | 'both';
 
 interface EditorState {
   project: ProjectDocument;
@@ -36,6 +37,7 @@ interface EditorState {
   updateObject: (id: string, updater: ObjectUpdater, recordHistory?: boolean) => void;
   syncObjectSize: (id: string, width: number, height: number) => void;
   addGraphic: (text: string) => void;
+  centerSelectedOnCanvas: (mode: CanvasCenterMode) => void;
   duplicateSelected: () => void;
   deleteObject: (id?: string) => void;
   toggleObjectVisibility: (id: string) => void;
@@ -147,6 +149,43 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
           objects: normalizeZIndexes([...state.project.objects, newObject]),
         }),
         selectedId: newObject.id,
+        past: pushHistory(state.past, state.transactionBase ?? state.project),
+        future: [],
+        transactionBase: null,
+      };
+    }),
+
+  centerSelectedOnCanvas: (mode) =>
+    set((state) => {
+      if (!state.selectedId) return state;
+      const selected = state.project.objects.find(
+        (object) => object.id === state.selectedId,
+      );
+      if (!selected || selected.locked) return state;
+
+      const position = {
+        x:
+          mode === 'vertical'
+            ? selected.position.x
+            : state.project.canvas.width / 2,
+        y:
+          mode === 'horizontal'
+            ? selected.position.y
+            : state.project.canvas.height / 2,
+      };
+      if (
+        position.x === selected.position.x &&
+        position.y === selected.position.y
+      )
+        return state;
+
+      return {
+        project: stampProject({
+          ...state.project,
+          objects: state.project.objects.map((object) =>
+            object.id === state.selectedId ? { ...object, position } : object,
+          ),
+        }),
         past: pushHistory(state.past, state.transactionBase ?? state.project),
         future: [],
         transactionBase: null,
