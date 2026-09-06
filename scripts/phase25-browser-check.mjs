@@ -50,6 +50,16 @@ const toggle = async (label, enabled) => {
   const checked = await control.getAttribute('aria-checked') === 'true';
   if (checked !== enabled) await control.click();
 };
+const paletteCheck = async (label) => {
+  const layer = label.match(/^フチ([123])/);
+  if (layer) {
+    const detail = page.locator('[data-stroke-layer="' + layer[1] + '"]');
+    if (!(await detail.getAttribute('open') !== null)) await detail.locator('summary').click();
+  }
+  await page.getByRole('button', { name: label + 'カラーピッカー', exact: true }).click();
+  assert.equal(await page.getByRole('group', { name: label + 'のパレット', exact: true }).getByRole('button').count(), 6);
+  await page.getByRole('button', { name: 'カラーピッカーを閉じる', exact: true }).click();
+};
 const selected = async (name) => page.locator('.editor-shell').getAttribute(`data-selected-${name}`);
 const selectedNumber = async (name) => Number(await selected(name));
 const snap = async (name) => {
@@ -233,9 +243,11 @@ try {
 
   await tab('スタイル');
   assert.equal(await page.getByLabel('パレット色 1', { exact: true }).count(), 1);
-  assert.equal(await page.getByRole('group', { name: '文字色のパレット', exact: true }).getByRole('button').count(), 6);
+  await paletteCheck('文字色');
   await page.getByLabel('パレット色 1', { exact: true }).fill('#223344');
+  await page.getByRole('button', { name: '文字色カラーピッカー', exact: true }).click();
   await page.getByRole('button', { name: '文字色を#223344に設定', exact: true }).click();
+  await page.getByRole('button', { name: 'カラーピッカーを閉じる', exact: true }).click();
   assert.equal((await page.getByLabel('文字色HEX値', { exact: true }).inputValue()).toUpperCase(), '#223344');
   await snap('02-color-palette');
   const paletteTemplate = await template('palette-custom');
@@ -246,16 +258,16 @@ try {
 
   await page.getByLabel('文字の塗り', { exact: true }).selectOption('linear-gradient');
   for (const label of ['開始色', '終了色']) {
-    assert.equal(await page.getByRole('group', { name: `${label}のパレット`, exact: true }).getByRole('button').count(), 6);
+    await paletteCheck(label);
   }
   await page.getByLabel('文字の塗り', { exact: true }).selectOption('solid');
-  for (const label of ['文字色', '白フチの色', '黒フチの色', '影の色']) {
-    assert.equal(await page.getByRole('group', { name: `${label}のパレット`, exact: true }).getByRole('button').count(), 6);
+  for (const label of ['文字色', 'フチ1の色', 'フチ2の色', '影の色']) {
+    await paletteCheck(label);
   }
   mark('全体色・フチ・影・gradient両端に共通palette');
 
-  await toggle('白フチを使用', false);
-  await toggle('黒フチを使用', false);
+  await toggle('フチ1を使用', false);
+  await toggle('フチ2を使用', false);
   await toggle('影を使用', false);
   await color('文字色', '#1236B7');
   await tab('背景');

@@ -1,8 +1,8 @@
 # Text Graphic Studio
 
-Text Graphic Studio は、SNS・Instagram・YouTube向けのタイトル画像をPCブラウザ内だけで制作するテキストグラフィック編集アプリです。画像の上へ、太い二重フチ付き日本語テキストと黄色いラフ背景を配置し、キャンバス全体またはテキスト単体をPNGとして保存できます。
+Text Graphic Studio は、SNS・Instagram・YouTube向けのタイトル画像をPCブラウザ内だけで制作するテキストグラフィック編集アプリです。画像の上へ、最大3層のフチ付き日本語テキストとブラシ背景を配置し、キャンバス全体またはテキスト単体をPNGとして保存できます。
 
-このリポジトリは Phase 2.5 の実装です。Phase 2 の編集基盤を維持し、画像ベースの行別自動追従背景、斜体／スラント、全体・部分文字の幅／高さ倍率、PC／ファイルフォント、1文字ずつの部分グラデーション、6色パレットを追加しています。バックエンド、ユーザー登録、クラウド保存、外部画像APIは使用しません。
+このリポジトリは Phase 2.6 のローカル実装です。Phase 2.5の編集基盤を維持し、共通カラーポップオーバー、全体／部分3層フチ、画像背景の高解像度直接合成、SNSガイドの視認性設定を追加しています。バックエンド、ユーザー登録、クラウド保存、外部画像APIは使用しません。公開サイトへのデプロイは行っていません。
 
 ## 必要環境
 
@@ -34,6 +34,8 @@ npx tsc --noEmit
 npm run test:browser
 npm run test:browser:phase2
 npm run test:browser:phase25
+npm run test:browser:phase26
+npm run build:netlify
 ```
 
 `test:browser` はWindows標準のMicrosoft Edgeを利用し、主要な編集フロー、PNG寸法・透過、テンプレート、自動復元を実ブラウザで確認します。
@@ -42,7 +44,15 @@ npm run test:browser:phase25
 
 `test:browser:phase25` は Chrome を使い、自動追従背景、glyph倍率、部分プロパティの後勝ちマージ、ローカルフォント、パレット、保存・復元を実操作とPNG画素で検証します。`PHASE25_APP_URL` と `PHASE25_BACKGROUND_PNG` で対象を変更でき、結果は `test-results/phase25/` に出力します。
 
-## Phase 2.5の操作
+## Phase 2.6の追加操作
+
+- 色欄は現在色のスウォッチ＋HEXだけを表示します。スウォッチを押すと、登録済み6色・自由色選択・HEXをまとめたポップオーバーが開きます。Enterで開き、Escapeで閉じて元のスウォッチへフォーカスが戻ります。パレット設定と利用用チップは別UIです。
+- 「スタイル」→「フチ」のフチ1／2／3を開き、使用状態・色・幅を設定します。フチ1が最内周、3が最外周。フチ2は1がON、フチ3は2がONのときだけONにできます。1 OFFは2/3もOFF、2 OFFは3もOFF。色・幅は残り、再ON時に再利用します。幅は各層の見える厚さで、影はその時点の有効なシルエットへ付きます。
+- 選択範囲のフチも、使用状態・色・幅を個別にチェックして適用できます。例えばフチ1の色だけを適用しても、既存の幅・他のフチ・フォント・グラデーション・字形倍率は消えません。連続ON/OFFの依存関係は部分範囲でも同じで、外側ONには範囲内すべての文字で内側ONが必要です。自動補完するのは依存するenabledだけです。
+- SNSガイドは既存の1種類選択を維持し、「薄い／標準／はっきり」とラベル表示を切り替えられます。領域の位置・サイズは変更せず、画面px基準の輪郭・ハッチ・ラベルで可読性を保ちます。PNGには入りません。
+- `test:browser:phase26` の結果と比較画像は `test-results/phase26/`。対象は `PHASE26_APP_URL`（既定4175番）、ブラシPNGは `PHASE26_BACKGROUND_PNG`、比較写真は `PHASE26_PHOTO` で変更できます。参考画像はアプリへ同梱せず、通常のファイル入力から読み込みます。
+
+## Phase 2.5から維持する操作
 
 1. 「テキスト」タブの「選択中のテキスト内容」で範囲を選択すると、部分スタイル欄が開きます。適用する色／1文字ずつのグラデーション・フォント・サイズ・字間・文字幅・文字高さ・太字だけをチェックし、「選択範囲に適用」を押します。部分指定は全体設定より優先され、重複範囲を後から適用しても同じプロパティだけが上書きされます。
 2. 範囲は文字欄の選択位置を保持します。「選択範囲を解除」「部分スタイルをすべて解除」で全体設定に戻せます。挿入・置換した文字は全体設定を使い、その後ろの範囲は追従します。
@@ -59,13 +69,14 @@ npm run test:browser:phase25
 - `PartialTextStyle` の `start/end` はtextareaと同じUTF-16位置（endは範囲外）。`fill`、`fontFamily/fontRefId`、絶対値pxの `fontSize/letterSpacing`、`glyphScaleX/glyphScaleY`、`fontWeight` を任意指定します。旧 `fontScale` は保持し、絶対サイズがない場合だけ使用します。複数範囲の重複は、後から指定された同一プロパティだけを優先します。
 - `FillStyle` は既存の単色／線形グラデーション型を使います。開始・終了色は `stops`、角度は `angle` に保持します。影の濃さは既存の `shadow.opacity`（0〜1）を維持しています。
 - 背景は `none / generatedRoughYellow / uploadedImage` に分岐します。画像背景の `imageMode` は `fixed / followLines`、行追従の3スライス設定は `followSettings` に保持します。`backgroundRenderer.ts` の定義・レンダラーが拡張点です。旧 `rough-band` は黄色ラフ背景の別名として処理します。
-- `background.image` は `{ id, fileName, sourceMimeType, dataUrl, width, height }`。PNGもSVGもローカルで自立したPNG data URLにして保存します。SVG原文や外部URL、blob URLを保存に使いません。画像デコードを待ってからFabricグループとPNG出力を作ります。
+- `background.image` は `{ id, fileName, sourceMimeType, dataUrl, width, height }` と任意の `sourceSvg`。ローカルで自立したPNG data URLを保持し、新規SVGには安全性検証・正規化済みの原文、寸法、クロップ領域も保存します。外部URLやblob URLは永続化しません。旧PNG化済みSVGも読めます。描画前に必要解像度で再ラスタライズします。
 - IndexedDBのDBバージョンを1→2へ更新し、既存の `projects` ストアを残して `background-presets` ストア（keyPath: id）だけ追加します。プリセットは `{ id, name, savedAt, background }`。作業のUndo/Redoとプリセット一覧の保存／削除は別です。プリセットの「適用」はUndo/Redo対象です。
-- `canvas.socialGuide` は任意の `{ enabled, platform }`。旧データではOFFとみなします。表示領域は `constants/socialGuides.ts`、表示はFabricとは別の非操作DOMオーバーレイです。
+- `canvas.socialGuide` は任意の `{ enabled, platform, visibility?, labelsVisible? }`。visibility省略時は標準、ラベル省略時はON、ガイド自体のない旧データはOFF。表示領域は `constants/socialGuides.ts`、表示はFabricとは別の非操作DOMオーバーレイです。
 - `ProjectDocument.palette` は6色、`fontCatalog` はフォント識別メタデータだけを保持します。`TypographyStyle` は `fontStyle/slant/glyphScaleX/glyphScaleY/fontRefId` を追加しました。旧schemaVersion 1データの欠落項目は読込時に既定値で補完します。
 - 出力5操作のLucideアイコン・名称・aria-label・hover/focusツールチップは `EditorActionButton.tsx` に集約しています。クリック先の既存保存処理は維持しています。
+- Phase 2.6の `strokes` は内→外の3要素配列 `{enabled,color,width}`。旧 `stroke` / `outerStroke` はフチ1／2へコピーし、フチ3はOFFで補完します。不連続な旧ON状態は外側を残して内側もONに補正。互換フィールドも保持しますが、新データの描画では `strokes` が正です。部分指定は `partialStyles[].strokes = { "1"?: {enabled?,color?,width?}, "2"?: ..., "3"?: ... }`。重複範囲は各leafだけを後勝ちマージし、enabledのみ連続性維持の依存補完があります。schemaVersionは1、IndexedDBバージョンは2のままです。
 
-受入試験の詳細とスクリーンショット一覧は [Phase 2受入報告](docs/phase2-acceptance.md) と [Phase 2.5受入報告](docs/phase25-acceptance.md) を参照してください。
+受入試験の詳細とスクリーンショット一覧は [Phase 2.6受入報告](docs/phase26-acceptance.md)、[Phase 2受入報告](docs/phase2-acceptance.md)、[Phase 2.5受入報告](docs/phase25-acceptance.md) を参照してください。
 
 ## 基本操作
 
@@ -124,7 +135,7 @@ app/
 src/
   canvas/
     FabricCanvas.tsx       Fabricキャンバス初期化・同期・背景表示
-    graphicTextRenderer.ts 二重フチ文字と各種背景を1グループとして描画
+    graphicTextRenderer.ts 3層フチ・単一影・背景を1グループとして描画
     StyledGraphicText.ts   部分style、glyph倍率、文字単位gradientの描画
     backgroundRenderer.ts 固定／行別3スライス背景の描画
     roughBand.ts           seed付きラフ背景形状
@@ -150,7 +161,9 @@ scripts/
 
 保存の正はFabric.jsのJSONではなく、アプリ固有の `ProjectDocument` と `GraphicTextObject` です。各テキストは文字組み、塗り、内外フチ、影、黄色背景、変形、将来用の部分スタイル・文字種倍率を独立して保持します。
 
-描画時には「任意のテキスト背景・黒外フチ・白フチ・文字」を1個のFabric `Group`へまとめます。`StyledGraphicText` はFabricの範囲スタイルを利用し、Fabricが標準対応しない範囲単位の字間・glyph縦横倍率・1文字単位gradientを測定／描画します。幅・高さ倍率はFabricグループの `scaleX/scaleY` とは別値で、最終行boundsを自動追従背景にも共有します。
+描画時には「任意のテキスト背景＋文字シルエットGroup」を1個の外側Fabric `Group`へまとめます。内側ではフチ3→2→1→塗りを描画し、合成した有効シルエットへ1回だけ影を付けます。`StyledGraphicText` はFabricの範囲スタイルを利用し、Fabricが標準対応しない範囲単位の字間・glyph縦横倍率・1文字単位gradientを測定／描画します。幅・高さ倍率はFabricグループの `scaleX/scaleY` とは別値で、最終行boundsを自動追従背景にも共有します。
+
+自動追従背景は行ごとの1x中間画像を作らず、元画像から回転込みの1枚の合成Canvasへ直接描きます。通常2〜4倍、長辺4096px／合計4MPを上限に解像度を選び、左右キャップは原画から読み、中央はクロップ優先です。SVG作業bitmapは1枚8MP、キャッシュ合計16MPを上限とします。複数SVGは準備直後に描画オブジェクトを生成し、描画前キャッシュ退避を防ぎます。既に配置中のFabricが保持するbitmapはキャッシュとは別に生存するため、全プロジェクトの総メモリ上限ではありません。
 
 ## 今後のPhase
 
@@ -162,7 +175,7 @@ scripts/
 - 生成する黄色背景は従来のラフポリゴンです。ブラシの厳密な再現はPNG/SVG読込で行い、高度な形状生成パラメーターは今回追加しません。
 - 部分編集はtextareaで範囲を選び、指定項目だけを追加適用する簡易UIです。Canvas上で文字範囲を直接編集するリッチテキストエディタや、適用済み区間を一覧から再編集するUIではありません。
 - 自動追従画像背景は左右キャップと可変中央部を行ごとに合成します。短すぎる行は破綻回避のため画像全体を縮小し、キャップ位置の手動調整UIはありません。自由変形・ベクターパス編集にも対応しません。
-- PNG/SVGは12MB・合計1600万画素以内。SVGは外部参照・スクリプト・アニメーション・埋込画像・文字・style要素を拒否する静的図形用です。文字やCSSは事前にパス／属性へ変換してください。保存時はPNG化するため拡大時のベクター品質は維持しません。
+- PNG/SVGは12MB・合計1600万画素以内。SVGは外部参照・スクリプト・アニメーション・埋込画像・文字・style要素を拒否する静的図形用です。文字やCSSは事前にパス／属性へ変換してください。新規SVGは安全な原文から再描画できますが、旧PNG化済みSVGと `non-scaling-stroke` 使用SVGはPNGを使います。メモリ上限を超える大きさでは内部倍率が下がり、PNGの元画像にないディテールは復元しません。
 - 復元前後でブラウザのアンチエイリアスに微小な差が生じる場合があります。保存値の一致とPNG画素差を実ブラウザ試験で検証しています。Chrome/Edge以外のブラウザでは未検証です。
 - フォントの見た目はPCへインストール済みのフォントに依存します。未導入フォントは警告して日本語対応フォールバックへ切り替わります。ファイル追加フォントはライセンス保護のためバイナリを永続化せず、再読み込み後は再追加が必要です。
 - 高さ基準配置を厳密に守るため、9:16画像を16:9キャンバスへ置くと左右に余白が生じます。左右クロップは、キャンバスより横長の画像で発生します。

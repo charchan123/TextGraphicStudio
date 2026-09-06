@@ -1,5 +1,6 @@
 import type { BackgroundPreset, ProjectDocument } from '@/src/types/editor';
 import { normalizeProjectDocument, normalizeTextBackground } from '@/src/services/documentData';
+import { isStrokeLayers } from '@/src/services/styleValidation';
 import { bounded, isColorPalette, isFillStyle, isFontReference, isPartialTextStyle, isSafeFontText, isTextBackground } from '@/src/services/styleValidation';
 
 const DATABASE_NAME = 'text-graphic-studio';
@@ -26,6 +27,7 @@ export const isProjectDocument = (value: unknown): value is ProjectDocument => {
       object.kind === 'graphic-text' &&
       typeof object.id === 'string' &&
       typeof object.text === 'string' && isRecord(object.typography)
+      && (object.strokes === undefined || isStrokeLayers(object.strokes))
       && isSafeFontText(object.typography.fontFamily)
       && (object.typography.fontRefId === undefined || isSafeFontText(object.typography.fontRefId))
       && (object.typography.fontStyle === undefined || object.typography.fontStyle === 'normal' || object.typography.fontStyle === 'italic' || object.typography.fontStyle === 'slant')

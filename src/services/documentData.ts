@@ -1,4 +1,5 @@
 import { DEFAULT_COLOR_PALETTE } from '@/src/store/defaults';
+import { clonePartialStrokes, getStrokeLayers } from '@/src/services/strokes';
 import type {
   ColorPalette,
   FillStyle,
@@ -23,11 +24,12 @@ export const cloneFill = (fill: FillStyle): FillStyle => fill.type === 'solid'
 export const clonePartialStyle = (style: PartialTextStyle): PartialTextStyle => ({
   ...style,
   fill: style.fill ? cloneFill(style.fill) : undefined,
+  strokes: clonePartialStrokes(style.strokes),
 });
 
 export const cloneBackground = (background: RoughBandStyle): RoughBandStyle => ({
   ...background,
-  image: background.image ? { ...background.image } : undefined,
+  image: background.image ? { ...background.image, sourceSvg: background.image.sourceSvg ? { ...background.image.sourceSvg, crop: { ...background.image.sourceSvg.crop } } : undefined } : undefined,
   followSettings: background.followSettings
     ? { ...background.followSettings }
     : undefined,
@@ -44,8 +46,9 @@ export const cloneGraphicObject = (object: GraphicTextObject): GraphicTextObject
   typography: { ...object.typography },
   characterScale: { ...object.characterScale },
   fill: cloneFill(object.fill),
-  stroke: { ...object.stroke },
-  outerStroke: { ...object.outerStroke },
+  stroke: { ...getStrokeLayers(object)[0] },
+  outerStroke: { ...getStrokeLayers(object)[1] },
+  strokes: getStrokeLayers(object),
   shadow: { ...object.shadow },
   background: cloneBackground(object.background),
   partialStyles: object.partialStyles.map(clonePartialStyle),
@@ -96,8 +99,9 @@ export const normalizeTemplate = (template: GraphicTextTemplateV1): GraphicTextT
     glyphScaleY: template.typography.glyphScaleY ?? 1,
   },
   fill: cloneFill(template.fill),
-  stroke: { ...template.stroke },
-  outerStroke: { ...template.outerStroke },
+  stroke: { ...getStrokeLayers(template)[0] },
+  outerStroke: { ...getStrokeLayers(template)[1] },
+  strokes: getStrokeLayers(template),
   shadow: { ...template.shadow },
   background: normalizeTextBackground(template.background),
   transform: { ...template.transform },

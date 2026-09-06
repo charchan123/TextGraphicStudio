@@ -4,6 +4,13 @@ import type { ColorPalette, FillStyle, FontReference, PartialTextStyle, RoughBan
 export const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 export const bounded = (value: unknown, min: number, max: number): value is number => typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
 const color = (value: unknown): value is string => typeof value === 'string' && /^#[0-9a-f]{3}(?:[0-9a-f]{3})?$/i.test(value);
+export const isStrokeLayers = (value: unknown): boolean => Array.isArray(value) && value.length === 3
+  && value.every((layer) => isRecord(layer) && typeof layer.enabled === 'boolean' && color(layer.color) && bounded(layer.width, 0, 40));
+const isPartialStrokes = (value: unknown): boolean => isRecord(value)
+  && Object.entries(value).every(([key, layer]) => ['1', '2', '3'].includes(key) && isRecord(layer)
+    && (layer.enabled === undefined || typeof layer.enabled === 'boolean')
+    && (layer.color === undefined || color(layer.color))
+    && (layer.width === undefined || bounded(layer.width, 0, 40)));
 export const isSafeFontText = (value: unknown): value is string => {
   if (typeof value !== 'string' || value.length === 0 || value.length > 240) return false;
   for (let index = 0; index < value.length; index += 1) {
@@ -42,7 +49,8 @@ export const isPartialTextStyle = (value: unknown): value is PartialTextStyle =>
   && (value.fontRefId === undefined || isSafeFontText(value.fontRefId))
   && (value.fontStyle === undefined || value.fontStyle === 'normal' || value.fontStyle === 'italic')
   && (value.glyphScaleX === undefined || bounded(value.glyphScaleX, 0.5, 1.5))
-  && (value.glyphScaleY === undefined || bounded(value.glyphScaleY, 0.5, 1.5));
+  && (value.glyphScaleY === undefined || bounded(value.glyphScaleY, 0.5, 1.5))
+  && (value.strokes === undefined || isPartialStrokes(value.strokes));
 
 export const isTextBackground = (value: unknown): value is RoughBandStyle => isRecord(value)
   && ['none', 'rough-band', 'generatedRoughYellow', 'uploadedImage'].includes(String(value.type))

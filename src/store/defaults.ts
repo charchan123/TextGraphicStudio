@@ -1,4 +1,5 @@
 import type { ColorPalette, FontReference, GraphicTextObject, ProjectDocument } from '@/src/types/editor';
+import { clonePartialStrokes, getStrokeLayers } from '@/src/services/strokes';
 
 export const DEFAULT_COLOR_PALETTE: ColorPalette = [
   '#000000',
@@ -107,6 +108,7 @@ export const createGraphicText = (
           },
     stroke: { ...preset.stroke },
     outerStroke: { ...preset.outerStroke },
+    strokes: getStrokeLayers(preset),
     shadow: { ...preset.shadow },
     background: {
       ...preset.background,
@@ -115,7 +117,7 @@ export const createGraphicText = (
         ? { ...preset.background.followSettings }
         : undefined,
     },
-    partialStyles: preset.partialStyles.map((style) => ({ ...style })),
+    partialStyles: preset.partialStyles.map((style) => ({ ...style, strokes: clonePartialStrokes(style.strokes) })),
     zIndex: index,
   };
 };

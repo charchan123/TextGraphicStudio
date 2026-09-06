@@ -1,15 +1,27 @@
 /* oxlint-disable typescript/no-deprecated -- Fabric centers grouped children with the legacy origin options. */
-import { Group, Shadow, type FabricObject } from 'fabric';
+import { Group, Shadow, util, type FabricObject } from 'fabric';
 
 import { resolveFontStack } from '@/src/constants/editor';
 import { createTextBackground } from '@/src/canvas/backgroundRenderer';
 import { applyTextRanges, StyledGraphicText } from '@/src/canvas/StyledGraphicText';
 import type { GraphicTextObject } from '@/src/types/editor';
+import { effectiveStrokesAt } from '@/src/services/strokes';
 
 export interface RenderedGraphicText {
   group: Group;
   intrinsicWidth: number;
   intrinsicHeight: number;
+}
+
+/** Preserve overhanging italic ink and transformed strokes in the single shadow cache. */
+class TextSilhouetteGroup extends Group {
+  inkPadding = 0;
+  override _getCacheCanvasDimensions() {
+    const dimensions = super._getCacheCanvasDimensions();
+    dimensions.width += (this.inkPadding ?? 0) * dimensions.zoomX;
+    dimensions.height += (this.inkPadding ?? 0) * dimensions.zoomY;
+    return dimensions;
+  }
 }
 
 const toRgba = (hex: string, opacity: number): string => {
@@ -56,6 +68,8 @@ const createTextLayer = (
     evented: false,
     objectCaching: false,
   });
+  // A range outline can split strokeText runs. Use the same glyph runs in fill and all outlines.
+  text.forceCharacterRendering = model.partialStyles.some((range) => range.strokes && Object.keys(range.strokes).length > 0);
   applyTextRanges(text, model);
   return text;
 };
@@ -83,26 +97,49 @@ export const createFabricGraphicText = (model: GraphicTextObject): RenderedGraph
   }));
   const slantedWidth = textWidth + Math.abs(shear) * textHeight;
 
-  const background = createTextBackground(model.background, slantedWidth, textHeight, lineLayouts);
+  const background = createTextBackground(model.background, slantedWidth, textHeight, lineLayouts, Math.max(Math.abs(model.transform.scaleX), Math.abs(model.transform.scaleY)));
   if (background) children.push(background);
 
-  const whiteWidth = model.stroke.enabled ? model.stroke.width : 0;
-  const blackWidth = model.outerStroke.enabled ? model.outerStroke.width : 0;
-  let shadowAssigned = false;
-
-  if (model.outerStroke.enabled) {
-    children.push(
-      createTextLayer(model, model.outerStroke.color, (whiteWidth + blackWidth) * 2, shadow),
-    );
-    shadowAssigned = Boolean(shadow);
+  const graphemes = util.string.graphemeSplit(model.text.replace(/\r\n?/g, '\n') || ' ');
+  let offset = 0;
+  const resolved = graphemes.map((grapheme) => {
+    const layers = effectiveStrokesAt(model, offset, offset + grapheme.length);
+    let sx = model.typography.glyphScaleX ?? 1, sy = model.typography.glyphScaleY ?? 1;
+    model.partialStyles.forEach((range) => {
+      if (range.end <= offset || range.start >= offset + grapheme.length) return;
+      sx = range.glyphScaleX ?? sx; sy = range.glyphScaleY ?? sy;
+    });
+    offset += grapheme.length;
+    return { layers, scale: Math.max(sx, sy), visible: grapheme !== '\n' };
+  });
+  const textChildren: FabricObject[] = [];
+  // Each pass contains outlines only. The fill is drawn once, after all outlines.
+  for (let index = 2; index >= 0; index -= 1) {
+    let maxWidth = 0;
+    const styles = resolved.map(({ layers, scale, visible }) => {
+      const layer = layers[index];
+      const width = visible && layer.enabled && layer.width > 0
+        ? layers.slice(0, index + 1).reduce((sum, item) => sum + (item.enabled ? item.width : 0), 0) * 2 : 0;
+      maxWidth = Math.max(maxWidth, width * scale);
+      return { stroke: width ? layer.color : '', strokeWidth: width };
+    });
+    if (!maxWidth) continue;
+    const layer = createTextLayer(model, '#000000', maxWidth, undefined);
+    layer.setPaintLayer('stroke');
+    styles.forEach((style, character) => { if (resolved[character].visible) layer.setSelectionStyles(style, character, character + 1); });
+    textChildren.push(layer);
   }
-  if (model.stroke.enabled) {
-    children.push(
-      createTextLayer(model, model.stroke.color, whiteWidth * 2, shadowAssigned ? undefined : shadow),
-    );
-    shadowAssigned = Boolean(shadow);
-  }
-  children.push(createTextLayer(model, undefined, 0, shadowAssigned ? undefined : shadow));
+  measurementText.setPaintLayer('fill');
+  textChildren.push(measurementText);
+  // One shadow on the composited text silhouette, never on a reserved or disabled layer.
+  // The outer GraphicText Group keeps the existing transform/selection contract.
+  const textGroup = new TextSilhouetteGroup(textChildren, {
+    left: 0, top: 0, originX: 'center', originY: 'center',
+    selectable: false, evented: false, objectCaching: Boolean(shadow),
+    shadow, subTargetCheck: false,
+  });
+  textGroup.inkPadding = Math.max(model.typography.fontSize, ...model.partialStyles.map((range) => range.fontSize ?? model.typography.fontSize)) * 3;
+  children.push(textGroup);
 
   const group = new Group(children, {
     left: model.position.x,

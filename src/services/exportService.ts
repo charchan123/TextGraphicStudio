@@ -5,6 +5,7 @@ import { prepareGraphicAssets } from '@/src/services/textBackgroundAssets';
 import { waitForGraphicFonts } from '@/src/services/fontService';
 import { downloadDataUrl, sanitizeFileName } from '@/src/services/download';
 import type { GraphicTextObject, ProjectDocument } from '@/src/types/editor';
+import { maxVisibleStrokeWidth } from '@/src/services/strokes';
 
 const loadHtmlImage = (source: string): Promise<HTMLImageElement> =>
   new Promise((resolve, reject) => {
@@ -68,8 +69,7 @@ const renderGraphicDataUrl = async (object: GraphicTextObject): Promise<string> 
   const bounds = group.getBoundingRect();
   const safeMargin = Math.ceil(
     24 +
-      object.stroke.width * 2 +
-      object.outerStroke.width * 2 +
+      maxVisibleStrokeWidth(object) * 3 * Math.max(Math.abs(object.transform.scaleX), Math.abs(object.transform.scaleY)) +
       object.shadow.blur * 2 +
       Math.abs(object.shadow.offsetX) +
       Math.abs(object.shadow.offsetY),
@@ -100,7 +100,7 @@ const renderGraphicDataUrl = async (object: GraphicTextObject): Promise<string> 
 
 const renderProjectDataUrl = async (project: ProjectDocument): Promise<string> => {
   const visibleObjects = project.objects.filter((object) => object.visible);
-  await Promise.all([waitForGraphicFonts(visibleObjects), prepareGraphicAssets(visibleObjects)]);
+  await waitForGraphicFonts(visibleObjects);
   const surface = new StaticCanvas(document.createElement('canvas'), {
     width: project.canvas.width,
     height: project.canvas.height,
@@ -128,14 +128,11 @@ const renderProjectDataUrl = async (project: ProjectDocument): Promise<string> =
     surface.backgroundImage = image;
   }
 
-  [...project.objects]
-    .filter((object) => object.visible)
-    .sort((left, right) => left.zIndex - right.zIndex)
-    .forEach((object) => {
+  await prepareGraphicAssets([...visibleObjects].sort((left, right) => left.zIndex - right.zIndex), (object) => {
       const { group } = createFabricGraphicText(object);
       group.set({ selectable: false, evented: false });
       surface.add(group);
-    });
+  });
 
   surface.renderAll();
   const dataUrl = surface.toDataURL({ format: 'png', multiplier: 1, enableRetinaScaling: false });

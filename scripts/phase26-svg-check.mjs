@@ -1,0 +1,40 @@
+import assert from 'node:assert/strict';
+import { chromium } from 'playwright-core';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+const output=path.resolve('test-results/phase26-svg');await mkdir(output,{recursive:true});
+const browser=await chromium.launch({executablePath:'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',headless:true});
+const page=await browser.newPage({viewport:{width:1600,height:1000},acceptDownloads:true});page.setDefaultTimeout(30000);
+const results=[],errors=[],external=[];page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(r.url().includes('external.invalid'))external.push(r.url());});
+await page.route('**/external.invalid/**',r=>r.abort());
+const pause=()=>page.waitForTimeout(500),tab=name=>page.getByRole('tab',{name,exact:true}).click();
+const mark=(name,details='')=>{results.push({name,status:'PASS',details});console.log('PASS '+name);};
+const file=async(markup,name)=>{await tab('背景');await page.getByLabel('背景タイプ',{exact:true}).selectOption('uploadedImage');await page.getByLabel('テキスト背景ファイル',{exact:true}).setInputFiles({name,mimeType:'image/svg+xml',buffer:Buffer.from(markup)});await pause();};
+const download=async(action,name)=>{const pending=page.waitForEvent('download');await page.locator('.editor-toolbar').locator(`[data-editor-action="${action}"]`).click();const target=path.join(output,name);await (await pending).saveAs(target);return readFile(target);};
+const template=async name=>JSON.parse((await download('templateSave',name+'.json')).toString());
+const load=async value=>{await page.getByLabel('テンプレートJSONファイル',{exact:true}).setInputFiles({name:'roundtrip.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(value))});await pause();};
+const svg=color=>`<svg xmlns="http://www.w3.org/2000/svg" width="300" height="120" viewBox="0 0 300 120"><path fill="${color}" d="M0 28 L28 10 20 0 280 15 300 0 286 52 300 100 272 97 278 120 18 112 0 120 14 68Z"/></svg>`;
+try{
+ await page.goto(process.env.PHASE26_APP_URL??'http://localhost:4175/',{waitUntil:'networkidle'});await page.locator('.startup-cover').waitFor({state:'hidden'});await page.locator('canvas.upper-canvas').waitFor();
+ await file(svg('#FFE900'),'vector-a.svg');const a=await template('vector-a');assert.equal(a.background.image.sourceMimeType,'image/svg+xml');assert.ok(a.background.image.sourceSvg.markup.includes('<svg'));assert.equal(a.background.image.sourceSvg.width,300);
+ const selected=await download('exportSelected','vector-a.png');assert.ok(selected.length>1000);mark('静的SVGを通常UI読込、sourceSvgとPNG fallbackを保存');
+ await file(svg('#00CCFF'),'vector-b.svg');await load(a);assert.ok((await download('exportSelected','vector-roundtrip.png')).equals(selected));assert.deepEqual((await template('vector-roundtrip')).background.image.sourceSvg,a.background.image.sourceSvg);mark('SVG A→B→JSON Aで識別情報・透明PNG完全一致');
+ const old=structuredClone(a);delete old.background.image.sourceSvg;await load(old);assert.equal((await template('old-vector')).background.image.sourceSvg,undefined);assert.ok((await download('exportSelected','old-vector.png')).length>1000);await load(a);mark('sourceSvgのない旧SVGデータをPNG fallbackで描画・出力');
+ const bad=[svg('#EEE').replace('</svg>','<script>alert(1)</script></svg>'),svg('#EEE').replace('</svg>','<animate attributeName="opacity" values="0;1" dur="1s"/></svg>'),svg('#EEE').replace('</svg>','<use href="https://external.invalid/secret.svg#x"/></svg>'),svg('#EEE').replace('fill="#EEE"','fill="url(\n https://external.invalid/fill.svg#x\n)"')];
+ for(let i=0;i<bad.length;i++){await file(bad[i],`unsafe-${i}.svg`);assert.equal((await template(`rejected-${i}`)).background.image.fileName,'vector-a.svg');}assert.deepEqual(external,[]);mark('script/animation/外部参照/改行URL拒否、背景維持、外部要求0');
+ const large=structuredClone(a);large.transform.scaleX=large.transform.scaleY=3;await load(large);await download('exportSelected','large-vector.png');await load(a);assert.ok((await download('exportSelected','vector-size-return.png')).equals(selected));
+ await page.waitForTimeout(1800);const before=await download('exportProject','before-restore.png');await page.reload({waitUntil:'networkidle'});await page.getByRole('button',{name:'復元する',exact:true}).click();await page.waitForTimeout(1500);assert.ok((await download('exportProject','after-restore.png')).equals(before));assert.ok((await download('exportSelected','selected-restored.png')).equals(selected));await page.screenshot({path:path.join(output,'svg-restored.png')});mark('SVG拡大→復帰とIndexedDB再起動後のPNG履歴非依存');
+ // Supplementary renderer diagnostic: the same batch consumer used by actual canvas/export.
+ const batch=await page.evaluate(async()=>{
+  const {loadTextBackgroundFile,prepareGraphicAssets,getPreparedBackgroundImage}=await import('/src/services/textBackgroundAssets.ts');
+  const doc=await new Promise(resolve=>{const r=indexedDB.open('text-graphic-studio');r.onsuccess=()=>{const db=r.result,q=db.transaction('projects').objectStore('projects').get('autosave');q.onsuccess=()=>{db.close();resolve(q.result);};};});
+  const models=[];for(const color of ['#FFCC00','#00DDFF','#FF0088']){const model=structuredClone(doc.objects[0]);model.transform.scaleX=model.transform.scaleY=5;model.typography.fontSize=400;model.background.image=await loadTextBackgroundFile(new File([`<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700"><path fill="${color}" d="M0 0H1200V700H0Z"/></svg>`],'batch.svg',{type:'image/svg+xml'}));models.push(model);}
+  const captured=[];await prepareGraphicAssets(models,model=>{const source=getPreparedBackgroundImage(model.background.image);captured.push({width:source.width,height:source.height});});return captured;
+ });assert.equal(batch.length,3);assert.ok(batch.every(x=>x.width>1200&&x.width*x.height<=8*1024*1024+8192),JSON.stringify(batch));mark('大きいSVG3種をcache上限下でも準備直後に高解像度描画',JSON.stringify(batch));
+ const lettering=structuredClone(a);lettering.background.enabled=false;lettering.background.type='none';lettering.shadow.enabled=false;lettering.typography={...lettering.typography,fontFamily:'Times New Roman',fontSize:240,letterSpacing:0,fontStyle:'normal',glyphScaleX:1,glyphScaleY:1};lettering.strokes=[{enabled:true,color:'#FF0000',width:3},{enabled:true,color:'#FFFFFF',width:6},{enabled:true,color:'#000000',width:4}];lettering.partialStyles=[{start:1,end:2,strokes:{'1':{width:5}}}];
+ await tab('テキスト');await page.getByLabel('選択中のテキスト内容',{exact:true}).fill('office');await page.getByLabel('選択中のテキスト内容',{exact:true}).blur();await load(lettering);
+ await page.evaluate(()=>{window.__phase26Calls=[];window.__phase26Original={};for(const method of ['fillText','strokeText']){const original=CanvasRenderingContext2D.prototype[method];window.__phase26Original[method]=original;CanvasRenderingContext2D.prototype[method]=function(...args){window.__phase26Calls.push({method,text:String(args[0])});return original.apply(this,args);};}});
+ await download('exportSelected','office-partial-stroke.png');const calls=await page.evaluate(()=>{const calls=window.__phase26Calls;for(const method of ['fillText','strokeText'])CanvasRenderingContext2D.prototype[method]=window.__phase26Original[method];delete window.__phase26Original;delete window.__phase26Calls;return calls;});
+ assert.ok(calls.some(x=>x.method==='fillText')&&calls.some(x=>x.method==='strokeText'));assert.ok(calls.every(x=>x.text.length===1),JSON.stringify(calls));await writeFile(path.join(output,'character-runs.json'),JSON.stringify(calls,null,2));mark('officeの一部フチ変更時も塗りと全輪郭を同じ文字単位で描画');
+ assert.deepEqual(errors,[]);await writeFile(path.join(output,'results.json'),JSON.stringify({results,errors,external,browser:await browser.version()},null,2));console.log(JSON.stringify({passed:results.length,output}));
+}catch(error){await page.screenshot({path:path.join(output,'failure.png')}).catch(()=>{});await writeFile(path.join(output,'failure.json'),JSON.stringify({results,error:String(error.stack??error),errors,external},null,2));throw error;}finally{await browser.close();}

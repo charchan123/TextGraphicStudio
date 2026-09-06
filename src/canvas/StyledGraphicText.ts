@@ -49,6 +49,15 @@ const compensateLinearGradient = (
 
 /** Fabric's native range styles plus pixel-based per-character tracking. */
 export class StyledGraphicText extends FabricText {
+  forceCharacterRendering = false;
+  private paintLayer?: 'fill' | 'stroke';
+  setPaintLayer(layer: 'fill' | 'stroke'): void { this.paintLayer = layer; }
+  override _renderTextFill(context: CanvasRenderingContext2D): void {
+    if (this.paintLayer !== 'stroke') super._renderTextFill(context);
+  }
+  override _renderTextStroke(context: CanvasRenderingContext2D): void {
+    if (this.paintLayer !== 'fill') super._renderTextStroke(context);
+  }
   private baseGlyphScaleX = 1;
   private baseGlyphScaleY = 1;
 
@@ -132,7 +141,7 @@ export class StyledGraphicText extends FabricText {
     const original = this.charSpacing;
     try {
       // Force Fabric's measured, per-character draw branch for range tracking/scaling.
-      if (hasCustomStyle && original === 0) this.charSpacing = 1;
+      if ((hasCustomStyle || this.forceCharacterRendering) && original === 0) this.charSpacing = 1;
       super._renderChars(...args);
     } finally { this.charSpacing = original; }
   }

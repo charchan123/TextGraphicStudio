@@ -70,6 +70,11 @@ export interface StrokeStyle {
   width: number;
 }
 
+/** Inner to outer; width is the visible thickness of that layer. */
+export type StrokeLayers = [StrokeStyle, StrokeStyle, StrokeStyle];
+export type StrokeLayerKey = '1' | '2' | '3';
+export type PartialStrokeLayers = Partial<Record<StrokeLayerKey, Partial<StrokeStyle>>>;
+
 export interface ShadowStyle {
   enabled: boolean;
   color: string;
@@ -108,6 +113,13 @@ export interface TextBackgroundImage {
   dataUrl: string;
   width: number;
   height: number;
+  /** Validated vector source and original transparent-padding crop. */
+  sourceSvg?: {
+    markup: string;
+    width: number;
+    height: number;
+    crop: { x: number; y: number; width: number; height: number };
+  };
 }
 
 export interface BackgroundPreset {
@@ -131,6 +143,7 @@ export interface PartialTextStyle {
   fontStyle?: 'normal' | 'italic';
   glyphScaleX?: number;
   glyphScaleY?: number;
+  strokes?: PartialStrokeLayers;
 }
 
 export interface GraphicTextObject {
@@ -151,6 +164,8 @@ export interface GraphicTextObject {
   fill: FillStyle;
   stroke: StrokeStyle;
   outerStroke: StrokeStyle;
+  /** Absent in legacy V1. stroke / outerStroke remain compatibility mirrors. */
+  strokes?: StrokeLayers;
   shadow: ShadowStyle;
   background: RoughBandStyle;
   partialStyles: PartialTextStyle[];
@@ -164,7 +179,7 @@ export interface CanvasSettings {
   height: number;
   preset: CanvasPresetId;
   guidesVisible: boolean;
-  socialGuide?: { enabled: boolean; platform: 'instagram-reels' | 'threads' | 'youtube-shorts' | 'x' };
+  socialGuide?: { enabled: boolean; platform: 'instagram-reels' | 'threads' | 'youtube-shorts' | 'x'; visibility?: 'light' | 'standard' | 'strong'; labelsVisible?: boolean };
 }
 
 export interface BackgroundImageData {
@@ -198,6 +213,7 @@ export interface GraphicTextTemplateV1 {
   fill: FillStyle;
   stroke: StrokeStyle;
   outerStroke: StrokeStyle;
+  strokes?: StrokeLayers;
   shadow: ShadowStyle;
   background: RoughBandStyle;
   transform: GraphicTextObject['transform'];

@@ -78,6 +78,15 @@ export function ExportPanel({
         <NativeSelect aria-label="SNSガイドの種類" value={guide.platform} onChange={(event) => setSocialGuide({ ...guide, platform: event.currentTarget.value as SocialPlatform })}>
           {Object.entries(SOCIAL_GUIDES).map(([value, definition]) => <NativeSelectOption key={value} value={value}>{definition.label}</NativeSelectOption>)}
         </NativeSelect>
+        <div className="social-guide-settings">
+          <label className="field-label" htmlFor="guide-visibility">ガイド視認性</label>
+          <NativeSelect id="guide-visibility" value={guide.visibility ?? 'standard'} onChange={(event) => setSocialGuide({ ...guide, visibility: event.currentTarget.value as 'light' | 'standard' | 'strong' })}>
+            <NativeSelectOption value="light">薄い</NativeSelectOption>
+            <NativeSelectOption value="standard">標準</NativeSelectOption>
+            <NativeSelectOption value="strong">はっきり</NativeSelectOption>
+          </NativeSelect>
+          <ToggleRow label="ガイドのラベルを表示" checked={guide.labelsVisible !== false} onCheckedChange={(labelsVisible) => setSocialGuide({ ...guide, labelsVisible })} />
+        </div>
         <p className="panel-note">{SOCIAL_GUIDES[guide.platform]?.note}。表示領域は端末・投稿形式で変わります。公式の保証範囲ではありません。ガイドはPNGには含まれません。</p>
       </section>
 

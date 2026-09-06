@@ -6,6 +6,7 @@ import { create } from 'zustand';
 import { HISTORY_LIMIT } from '@/src/constants/editor';
 import { cloneBackground, cloneFill, cloneFontCatalog, clonePartialStyle } from '@/src/services/documentData';
 import { createGraphicText, createInitialProject, createObjectId } from '@/src/store/defaults';
+import { getStrokeLayers } from '@/src/services/strokes';
 import type {
   AppNotice,
   BackgroundImageData,
@@ -213,6 +214,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         fill: cloneFill(source.fill),
         stroke: { ...source.stroke },
         outerStroke: { ...source.outerStroke },
+        strokes: getStrokeLayers(source),
         shadow: { ...source.shadow },
         background: { ...cloneBackground(source.background), seed: source.background.seed + 97 },
         partialStyles: source.partialStyles.map(clonePartialStyle),
@@ -342,6 +344,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       fill: cloneFill(template.fill),
       stroke: { ...template.stroke },
       outerStroke: { ...template.outerStroke },
+      strokes: getStrokeLayers(template),
       shadow: { ...template.shadow },
       background: cloneBackground(template.background),
       transform: { ...template.transform },

@@ -189,10 +189,12 @@ try {
   await page.getByRole('tab', { name: 'スタイル' }).click();
   await page.getByLabel('文字色HEX値').fill('#CE0902');
   await page.getByLabel('文字色HEX値').blur();
-  await page.getByLabel('白フチの幅の数値').fill('11');
-  await page.getByLabel('白フチの幅の数値').blur();
-  await page.getByLabel('黒フチの幅の数値').fill('7');
-  await page.getByLabel('黒フチの幅の数値').blur();
+  await page.locator('[data-stroke-layer="1"] > summary').click();
+  await page.locator('[data-stroke-layer="2"] > summary').click();
+  await page.getByLabel('フチ1の幅の数値').fill('11');
+  await page.getByLabel('フチ1の幅の数値').blur();
+  await page.getByLabel('フチ2の幅の数値').fill('7');
+  await page.getByLabel('フチ2の幅の数値').blur();
   await page.getByLabel('影のぼかしの数値').fill('13');
   await page.getByLabel('影のぼかしの数値').blur();
   await page.getByLabel('影の横位置の数値').fill('8');
@@ -204,7 +206,7 @@ try {
   assert.equal(await selectedNumber('shadow-opacity'), 0);
   await typeNumberSequentially(shadowOpacityInput, ['6', '2']);
   assert.equal(await selectedNumber('shadow-opacity'), 0.62);
-  mark('文字色・白フチ・黒フチ・影・影opacity');
+  mark('文字色・フチ1・フチ2・影・影opacity');
   await capture('phase1-1-03-style-changed.jpg');
 
   await page.getByRole('tab', { name: '背景' }).click();

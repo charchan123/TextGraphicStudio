@@ -323,6 +323,7 @@ try {
   await pause(1600); const restored = await readSaved();
   assert.deepEqual(restored.objects, saved.objects); assert.deepEqual(restored.canvas, saved.canvas);
   await tab('背景');
+  await page.getByLabel('保存済み背景プリセット').locator('option').filter({ hasText: '復元確認SVG' }).waitFor({ state: 'attached' });
   assert.equal(await page.getByLabel('保存済み背景プリセット').locator('option').filter({ hasText: '復元確認SVG' }).count(), 1);
   await snap('11-restored'); mark('A/F: IndexedDB復元・背景プリセット再起動保持・保存値完全一致・PNG画素比較', JSON.stringify(restoreDiff));
 

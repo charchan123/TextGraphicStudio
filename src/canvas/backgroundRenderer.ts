@@ -20,47 +20,42 @@ const renderers: Record<(typeof BACKGROUND_TYPES)[number]['value'], Renderer> = 
   generatedRoughYellow: (style, width, height) => new Polygon(createRoughBandPoints(width, height, style.roughness, style.seed), { fill: style.color }),
   uploadedImage: (style, width, height) => {
     if (!style.image) return null;
-    return new FabricImage(getPreparedBackgroundImage(style.image), { scaleX: width / style.image.width, scaleY: height / style.image.height });
+    const source = getPreparedBackgroundImage(style.image);
+    return new FabricImage(source, { scaleX: width / source.width, scaleY: height / source.height });
   },
 };
 
-const createThreeSliceCanvas = (style: RoughBandStyle, width: number, height: number): HTMLCanvasElement | null => {
-  if (!style.image) return null;
+export const drawThreeSlice = (context: CanvasRenderingContext2D, style: RoughBandStyle, width: number, height: number): void => {
+  if (!style.image) return;
   const source = getPreparedBackgroundImage(style.image);
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.ceil(width));
-  canvas.height = Math.max(1, Math.ceil(height));
-  const context = canvas.getContext('2d');
-  if (!context) return null;
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = 'high';
   const settings = style.followSettings ?? { capRatio: 0.22, seamOverlap: 2, lineOverlap: 6 };
-  const sourceWidth = Math.max(1, style.image.width);
-  const sourceHeight = Math.max(1, style.image.height);
-  const cap = Math.max(1, Math.round(sourceWidth * settings.capRatio));
-  const overlap = Math.min(settings.seamOverlap, cap - 1);
-  const scaledCap = cap * canvas.height / sourceHeight;
-  if (canvas.width <= scaledCap * 2 + 2) {
-    context.drawImage(source, 0, 0, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
-    return canvas;
+  const sourceWidth = Math.max(1, source.width);
+  const sourceHeight = Math.max(1, source.height);
+  const cap = sourceWidth * settings.capRatio;
+  const ratio = height / sourceHeight;
+  const scaledCap = cap * ratio;
+  if (width <= scaledCap * 2 + 2) {
+    context.drawImage(source, 0, 0, sourceWidth, sourceHeight, 0, 0, width, height);
+    return;
   }
-  const leftEnd = Math.max(1, Math.round(scaledCap));
-  const rightStart = Math.min(canvas.width - 1, canvas.width - leftEnd);
-  // Source crops overlap slightly; destination clips share integer boundaries, avoiding both gaps and alpha darkening.
-  context.drawImage(source, 0, 0, cap + overlap, sourceHeight, 0, 0, leftEnd, canvas.height);
-  context.drawImage(
-    source,
-    cap - overlap,
-    0,
-    Math.max(1, sourceWidth - cap * 2 + overlap * 2),
-    sourceHeight,
-    leftEnd,
-    0,
-    Math.max(1, rightStart - leftEnd),
-    canvas.height,
-  );
-  context.drawImage(source, sourceWidth - cap - overlap, 0, cap + overlap, sourceHeight, rightStart, 0, canvas.width - rightStart, canvas.height);
-  return canvas;
+  const centerWidth = width - scaledCap * 2;
+  // Retain the cap scale. Crop the middle when it is already wide enough.
+  const middleSourceWidth = Math.min(sourceWidth - cap * 2, centerWidth / ratio);
+  const middleStart = (sourceWidth - middleSourceWidth) / 2;
+  // Overlap in destination space too: adjacent antialiased clip edges leave a pale seam.
+  // Sample the neighboring original pixels, rather than stretching the cap into that overlap.
+  const overlap = Math.max(2, settings.seamOverlap) * sourceWidth / style.image.width;
+  const draw = (sx: number, sw: number, dx: number, dw: number) => {
+    const scale = dw / sw;
+    const overscan = Math.max(overlap, 0.5 / scale);
+    const before = Math.min(overscan, sx), after = Math.min(overscan, sourceWidth - sx - sw);
+    context.drawImage(source, sx - before, 0, sw + before + after, sourceHeight, dx - before * scale, 0, dw + (before + after) * scale, height);
+  };
+  draw(0, cap, 0, scaledCap);
+  draw(middleStart, middleSourceWidth, scaledCap, centerWidth);
+  draw(sourceWidth - cap, cap, width - scaledCap, scaledCap);
 };
 
 const rotatedBounds = (line: TextLineLayout, width: number, height: number, angle: number) => {
@@ -79,7 +74,7 @@ const rotatedBounds = (line: TextLineLayout, width: number, height: number, angl
   };
 };
 
-const createFollowLinesBackground = (style: RoughBandStyle, lines: TextLineLayout[]): FabricObject | null => {
+const createFollowLinesBackground = (style: RoughBandStyle, lines: TextLineLayout[], outputScale: number): FabricObject | null => {
   if (!style.image || !lines.length) return null;
   const settings = style.followSettings ?? { capRatio: 0.22, seamOverlap: 2, lineOverlap: 6 };
   const entries = lines.map((line) => ({
@@ -93,19 +88,23 @@ const createFollowLinesBackground = (style: RoughBandStyle, lines: TextLineLayou
   const minY = Math.min(...bounds.map((bound) => bound.minY));
   const maxY = Math.max(...bounds.map((bound) => bound.maxY));
   const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.ceil(maxX - minX));
-  canvas.height = Math.max(1, Math.ceil(maxY - minY));
+  const logicalWidth = Math.max(1, maxX - minX), logicalHeight = Math.max(1, maxY - minY);
+  // One bounded working bitmap. Never shrink each line first, then rotate that low-resolution bitmap.
+  const resolution = Math.min(Math.max(2, outputScale * 2), 4,
+    4096 / logicalWidth, 4096 / logicalHeight, Math.sqrt(4 * 1024 * 1024 / (logicalWidth * logicalHeight)));
+  canvas.width = Math.max(1, Math.ceil(logicalWidth * resolution));
+  canvas.height = Math.max(1, Math.ceil(logicalHeight * resolution));
   const context = canvas.getContext('2d');
   if (!context) return null;
   context.imageSmoothingEnabled = true;
   context.imageSmoothingQuality = 'high';
+  context.scale(canvas.width / logicalWidth, canvas.height / logicalHeight);
   entries.forEach((entry) => {
-    const sliced = createThreeSliceCanvas(style, entry.width, entry.height);
-    if (!sliced) return;
     context.save();
     context.translate(entry.line.centerX - minX, entry.line.centerY - minY);
     context.rotate(style.rotation * Math.PI / 180);
-    context.drawImage(sliced, -entry.width / 2, -entry.height / 2, entry.width, entry.height);
+    context.translate(-entry.width / 2, -entry.height / 2);
+    drawThreeSlice(context, style, entry.width, entry.height);
     context.restore();
   });
   return new FabricImage(canvas, {
@@ -113,12 +112,14 @@ const createFollowLinesBackground = (style: RoughBandStyle, lines: TextLineLayou
     top: (minY + maxY) / 2,
     originX: 'center',
     originY: 'center',
+    scaleX: logicalWidth / canvas.width,
+    scaleY: logicalHeight / canvas.height,
   });
 };
 
-export const createTextBackground = (style: RoughBandStyle, textWidth: number, textHeight: number, lines: TextLineLayout[] = []): FabricObject | null => {
+export const createTextBackground = (style: RoughBandStyle, textWidth: number, textHeight: number, lines: TextLineLayout[] = [], outputScale = 1): FabricObject | null => {
   if (effectiveBackgroundType(style) === 'uploadedImage' && style.imageMode === 'followLines') {
-    const followed = createFollowLinesBackground(style, lines);
+    const followed = createFollowLinesBackground(style, lines, outputScale);
     followed?.set({ selectable: false, evented: false, objectCaching: false });
     return followed;
   }

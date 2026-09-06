@@ -125,10 +125,16 @@ export function FabricCanvas() {
     if (!canvasReady || !canvas) return;
     let cancelled = false;
     const rebuild = async () => {
-    await Promise.all([
-      prepareGraphicAssets(project.objects),
-      waitForGraphicFonts(project.objects),
-    ]);
+    await waitForGraphicFonts(project.objects);
+    if (cancelled) return;
+    const visibleObjects = [...project.objects]
+      .sort((left, right) => left.zIndex - right.zIndex)
+      .filter((object) => object.visible);
+    const prepared: Array<{ object: typeof visibleObjects[number]; rendered: ReturnType<typeof createFabricGraphicText> }> = [];
+    await prepareGraphicAssets(visibleObjects, (object) => {
+      if (!cancelled) prepared.push({ object, rendered: createFabricGraphicText(object) });
+    });
+    if (cancelled) { prepared.forEach(({ rendered }) => rendered.group.dispose()); return; }
     if (cancelled) return;
     const desiredSelectedId = useEditorStore.getState().selectedId;
     const previousGroups = [...groupMapRef.current.values()];
@@ -137,12 +143,7 @@ export function FabricCanvas() {
     groupMapRef.current.clear();
     idMapRef.current = new WeakMap<object, string>();
 
-    const visibleObjects = [...project.objects]
-      .sort((left, right) => left.zIndex - right.zIndex)
-      .filter((object) => object.visible);
-
-    for (const object of visibleObjects) {
-      const rendered = createFabricGraphicText(object);
+    for (const { object, rendered } of prepared) {
       groupMapRef.current.set(object.id, rendered.group);
       idMapRef.current.set(rendered.group, object.id);
       canvas.add(rendered.group);

@@ -3,6 +3,8 @@ import type { ColorPalette, FontReference, GraphicTextObject, GraphicTextTemplat
 import { cloneBackground, cloneFill, cloneFontCatalog, clonePartialStyle, normalizeTemplate } from '@/src/services/documentData';
 import { bounded, isColorPalette, isFillStyle, isFontReference, isPartialTextStyle, isSafeFontText, isTextBackground } from '@/src/services/styleValidation';
 import { prepareBackgroundImage } from '@/src/services/textBackgroundAssets';
+import { getStrokeLayers } from '@/src/services/strokes';
+import { isStrokeLayers } from '@/src/services/styleValidation';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
@@ -24,6 +26,7 @@ export const createTemplate = (
   fill: cloneFill(object.fill),
   stroke: { ...object.stroke },
   outerStroke: { ...object.outerStroke },
+  strokes: getStrokeLayers(object),
   shadow: { ...object.shadow },
   background: cloneBackground(object.background),
   transform: { ...object.transform },
@@ -69,6 +72,7 @@ const isTemplate = (value: unknown): value is GraphicTextTemplateV1 => {
   const fillIsValid = isFillStyle(fill);
   return (
     fillIsValid &&
+    (value.strokes === undefined || isStrokeLayers(value.strokes)) &&
     isString(typography.fontFamily) &&
     (typography.fontRefId === undefined || isSafeFontText(typography.fontRefId)) &&
     isFiniteNumber(typography.fontSize) &&
@@ -116,7 +120,7 @@ const isTemplate = (value: unknown): value is GraphicTextTemplateV1 => {
 };
 
 export const readTemplateFile = async (file: File): Promise<GraphicTextTemplateV1> => {
-  if (file.size > 30 * 1024 * 1024) throw new Error('テンプレートは30MB以内にしてください。');
+  if (file.size > 64 * 1024 * 1024) throw new Error('テンプレートは64MB以内にしてください。');
   let parsed: unknown;
   try {
     parsed = JSON.parse(await file.text());
