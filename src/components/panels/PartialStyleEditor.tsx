@@ -8,14 +8,14 @@ import { SliderField } from '@/src/components/controls/SliderField';
 import { FontFamilySelect } from '@/src/components/FontPicker';
 import { useObjectEditor } from '@/src/hooks/useObjectEditor';
 import { clearRangeStyles } from '@/src/services/partialStyles';
-import type { GraphicTextObject, PartialTextStyle, PartialStrokeLayers } from '@/src/types/editor';
+import type { GraphicTextObject, PartialTextStyle } from '@/src/types/editor';
 import { PartialStrokeEditor } from '@/src/components/panels/StrokeEditor';
-import { clonePartialStrokes, mergeStrokePatch, strokeLayersInRange } from '@/src/services/strokes';
+import { applyPartialStrokeEdits, createPartialStrokeEdits, hasPartialStrokeEdits, strokeLayersInRange } from '@/src/services/strokes';
 
 const noop = () => undefined;
 export function PartialStyleEditor({ selected, start, end }: { selected: GraphicTextObject; start: number; end: number }) {
   const editor = useObjectEditor(selected.id);
-  const [strokePatch, setStrokePatch] = useState<PartialStrokeLayers>({});
+  const [strokeEdits, setStrokeEdits] = useState(() => createPartialStrokeEdits(selected, start, end));
   const [fillType, setFillType] = useState<'solid' | 'linear-gradient'>('solid');
   const [color, setColor] = useState('#D20A11');
   const [gradientEnd, setGradientEnd] = useState('#F08A16');
@@ -28,10 +28,9 @@ export function PartialStyleEditor({ selected, start, end }: { selected: Graphic
   const [font, setFont] = useState({ family: selected.typography.fontFamily, refId: selected.typography.fontRefId });
   const [enabled, setEnabled] = useState({ fill: true, size: false, spacing: false, glyphWidth: false, glyphHeight: false, bold: false, font: false });
   const valid = start < end && end <= selected.text.length;
-  const validStrokes = strokeLayersInRange(selected, start, end).every((layers) => {
-    const next = mergeStrokePatch(layers, strokePatch);
-    return (!next[1].enabled || next[0].enabled) && (!next[2].enabled || next[1].enabled);
-  });
+  const simulatedStyles = applyPartialStrokeEdits(selected.partialStyles, start, end, strokeEdits);
+  const validStrokes = strokeLayersInRange({ ...selected, partialStyles: simulatedStyles }, start, end)
+    .every((layers) => (!layers[1].enabled || layers[0].enabled) && (!layers[2].enabled || layers[1].enabled));
   const option = (key: keyof typeof enabled, label: string) => <div className="checkbox-row"><Checkbox id={`range-${key}`} checked={enabled[key]} onCheckedChange={(checked) => setEnabled((value) => ({ ...value, [key]: Boolean(checked) }))} /><label htmlFor={`range-${key}`}>{label}</label></div>;
   return <details className="partial-style-editor" open={valid}>
     <summary>選択範囲にスタイルを適用</summary>
@@ -66,10 +65,10 @@ export function PartialStyleEditor({ selected, start, end }: { selected: Graphic
       <label className="field-label" htmlFor="range-font-family">範囲のフォント</label>
       <FontFamilySelect id="range-font-family" ariaLabel="範囲のフォント" value={font.family} refId={font.refId} onChange={({ family, refId }) => setFont({ family, refId })} />
     </div>}
-    <PartialStrokeEditor selected={selected} start={start} end={end} patch={strokePatch} onChange={setStrokePatch} />
+    <PartialStrokeEditor selected={selected} start={start} end={end} edits={strokeEdits} onChange={setStrokeEdits} />
     {!validStrokes && <output className="panel-note">内側のフチをONにするか、外側の使用状態の指定を解除してください。</output>}
     <div className="inline-actions">
-      <Button disabled={!valid || !validStrokes || (!Object.values(enabled).some(Boolean) && !Object.keys(strokePatch).length)} onClick={() => {
+      <Button disabled={!valid || !validStrokes || (!Object.values(enabled).some(Boolean) && !hasPartialStrokeEdits(strokeEdits))} onClick={() => {
         const style: PartialTextStyle = { start, end };
         if (enabled.fill) style.fill = fillType === 'solid'
           ? { type: 'solid', color }
@@ -80,8 +79,12 @@ export function PartialStyleEditor({ selected, start, end }: { selected: Graphic
         if (enabled.glyphHeight) style.glyphScaleY = glyphHeight / 100;
         if (enabled.bold) style.fontWeight = bold ? 900 : 400;
         if (enabled.font) { style.fontFamily = font.family; style.fontRefId = font.refId; }
-        if (Object.keys(strokePatch).length) style.strokes = clonePartialStrokes(strokePatch);
-        editor.commit((object) => ({ ...object, partialStyles: [...object.partialStyles, style] }));
+        const hasGeneralStyle = Object.keys(style).some((key) => key !== 'start' && key !== 'end');
+        editor.commit((object) => {
+          const withStrokeEdits = applyPartialStrokeEdits(object.partialStyles, start, end, strokeEdits);
+          return { ...object, partialStyles: hasGeneralStyle ? [...withStrokeEdits, style] : withStrokeEdits };
+        });
+        setStrokeEdits(createPartialStrokeEdits(selected, start, end));
       }}>選択範囲に適用</Button>
       <Button variant="outline" disabled={!valid || !selected.partialStyles.length} onClick={() => editor.commit((object) => ({ ...object, partialStyles: clearRangeStyles(object.partialStyles, start, end) }))}>選択範囲を解除</Button>
     </div>

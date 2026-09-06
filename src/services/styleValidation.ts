@@ -56,6 +56,8 @@ export const isTextBackground = (value: unknown): value is RoughBandStyle => isR
   && ['none', 'rough-band', 'generatedRoughYellow', 'uploadedImage'].includes(String(value.type))
   && typeof value.enabled === 'boolean' && color(value.color)
   && bounded(value.rotation, -360, 360) && bounded(value.paddingX, 0, 1000) && bounded(value.paddingY, 0, 1000)
+  && (value.offsetX === undefined || bounded(value.offsetX, -2000, 2000))
+  && (value.offsetY === undefined || bounded(value.offsetY, -2000, 2000))
   && bounded(value.roughness, 0, 1) && bounded(value.seed, -Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER)
   && (value.image === undefined || isEmbeddedBackgroundImage(value.image))
   && (value.imageMode === undefined || value.imageMode === 'fixed' || value.imageMode === 'followLines')

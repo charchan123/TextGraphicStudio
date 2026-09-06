@@ -1,15 +1,18 @@
-import type { BackgroundPreset, ProjectDocument } from '@/src/types/editor';
+import type { BackgroundPreset, ProjectDocument, TextDesignDefaults } from '@/src/types/editor';
 import { normalizeProjectDocument, normalizeTextBackground } from '@/src/services/documentData';
+import { toTextDesignDefaults } from '@/src/services/textDefaults';
 import { isStrokeLayers } from '@/src/services/styleValidation';
 import { bounded, isColorPalette, isFillStyle, isFontReference, isPartialTextStyle, isSafeFontText, isTextBackground } from '@/src/services/styleValidation';
 
 const DATABASE_NAME = 'text-graphic-studio';
 const STORE_NAME = 'projects';
 const AUTOSAVE_KEY = 'autosave';
+const LAST_USED_TEXT_DEFAULTS_KEY = 'last-used-text-defaults';
 const PRESETS_STORE = 'background-presets';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
+const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 
 export const isProjectDocument = (value: unknown): value is ProjectDocument => {
   if (!isRecord(value)) return false;
@@ -27,6 +30,13 @@ export const isProjectDocument = (value: unknown): value is ProjectDocument => {
       object.kind === 'graphic-text' &&
       typeof object.id === 'string' &&
       typeof object.text === 'string' && isRecord(object.typography)
+      && isRecord(object.characterScale)
+      && isFiniteNumber(object.characterScale.kanji)
+      && isFiniteNumber(object.characterScale.hiragana)
+      && isFiniteNumber(object.characterScale.katakana)
+      && isFiniteNumber(object.characterScale.latin)
+      && isFiniteNumber(object.characterScale.number)
+      && (object.characterScale.symbol === undefined || isFiniteNumber(object.characterScale.symbol))
       && (object.strokes === undefined || isStrokeLayers(object.strokes))
       && isSafeFontText(object.typography.fontFamily)
       && (object.typography.fontRefId === undefined || isSafeFontText(object.typography.fontRefId))
@@ -81,6 +91,28 @@ export const loadAutosave = async (): Promise<ProjectDocument | null> => {
 
 export const clearAutosave = async (): Promise<void> => {
   await runRequest('readwrite', (store) => store.delete(AUTOSAVE_KEY));
+};
+
+export const saveLastUsedTextDefaults = async (defaults: TextDesignDefaults): Promise<void> => {
+  await runRequest('readwrite', (store) => store.put({
+    kind: 'text-graphic-studio-last-used-text-defaults',
+    schemaVersion: 1,
+    defaults,
+  }, LAST_USED_TEXT_DEFAULTS_KEY));
+};
+
+export const loadLastUsedTextDefaults = async (): Promise<TextDesignDefaults | null> => {
+  const value = await runRequest<unknown>('readonly', (store) => store.get(LAST_USED_TEXT_DEFAULTS_KEY));
+  if (!isRecord(value) || value.kind !== 'text-graphic-studio-last-used-text-defaults' || value.schemaVersion !== 1 || !isRecord(value.defaults)) return null;
+  const defaults = value.defaults;
+  const probe = {
+    kind: 'text-graphic-studio-project', schemaVersion: 1, updatedAt: new Date(0).toISOString(),
+    canvas: { width: 1080, height: 1920, preset: 'portrait', guidesVisible: true },
+    backgroundImage: null,
+    objects: [{ ...defaults, id: 'last-used', name: 'last-used', text: ' ', position: { x: 0, y: 0 }, zIndex: 0 }],
+  };
+  if (!isProjectDocument(probe)) return null;
+  return toTextDesignDefaults(normalizeProjectDocument(probe).objects[0]);
 };
 
 export const saveBackgroundPreset = async (preset: BackgroundPreset): Promise<void> => {

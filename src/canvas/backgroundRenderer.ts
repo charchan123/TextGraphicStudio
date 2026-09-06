@@ -108,8 +108,8 @@ const createFollowLinesBackground = (style: RoughBandStyle, lines: TextLineLayou
     context.restore();
   });
   return new FabricImage(canvas, {
-    left: (minX + maxX) / 2,
-    top: (minY + maxY) / 2,
+    left: (minX + maxX) / 2 + (style.offsetX ?? 0),
+    top: (minY + maxY) / 2 + (style.offsetY ?? 0),
     originX: 'center',
     originY: 'center',
     scaleX: logicalWidth / canvas.width,
@@ -125,6 +125,6 @@ export const createTextBackground = (style: RoughBandStyle, textWidth: number, t
   }
   const renderer = renderers[effectiveBackgroundType(style)];
   const background = renderer(style, textWidth + style.paddingX * 2, textHeight + style.paddingY * 2);
-  background?.set({ left: 0, top: 0, originX: 'center', originY: 'center', angle: style.rotation, selectable: false, evented: false, objectCaching: false });
+  background?.set({ left: style.offsetX ?? 0, top: style.offsetY ?? 0, originX: 'center', originY: 'center', angle: style.rotation, selectable: false, evented: false, objectCaching: false });
   return background;
 };

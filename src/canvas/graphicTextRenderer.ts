@@ -69,7 +69,8 @@ const createTextLayer = (
     objectCaching: false,
   });
   // A range outline can split strokeText runs. Use the same glyph runs in fill and all outlines.
-  text.forceCharacterRendering = model.partialStyles.some((range) => range.strokes && Object.keys(range.strokes).length > 0);
+  text.forceCharacterRendering = model.partialStyles.some((range) => range.strokes && Object.keys(range.strokes).length > 0)
+    || Object.values(model.characterScale).some((scale) => Math.abs(scale - 1) > 0.0001);
   applyTextRanges(text, model);
   return text;
 };

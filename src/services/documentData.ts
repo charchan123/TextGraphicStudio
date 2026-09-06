@@ -56,6 +56,8 @@ export const cloneGraphicObject = (object: GraphicTextObject): GraphicTextObject
 
 export const normalizeTextBackground = (background: RoughBandStyle): RoughBandStyle => ({
   ...cloneBackground(background),
+  offsetX: background.offsetX ?? 0,
+  offsetY: background.offsetY ?? 0,
   imageMode: background.imageMode === 'followLines' ? 'followLines' : 'fixed',
   followSettings: background.followSettings
     ? { ...background.followSettings }
@@ -72,6 +74,10 @@ const normalizeObject = (object: GraphicTextObject): GraphicTextObject => ({
     glyphScaleY: object.typography.glyphScaleY ?? 1,
   },
   background: normalizeTextBackground(object.background),
+  characterScale: {
+    ...object.characterScale,
+    symbol: object.characterScale.symbol ?? 1,
+  },
 });
 
 export const normalizeProjectDocument = (project: ProjectDocument): ProjectDocument => {
@@ -105,7 +111,7 @@ export const normalizeTemplate = (template: GraphicTextTemplateV1): GraphicTextT
   shadow: { ...template.shadow },
   background: normalizeTextBackground(template.background),
   transform: { ...template.transform },
-  characterScale: { ...template.characterScale },
+  characterScale: { ...template.characterScale, symbol: template.characterScale.symbol ?? 1 },
   partialStyles: template.partialStyles.map(clonePartialStyle),
   palette: template.palette ? [...template.palette] : [...DEFAULT_COLOR_PALETTE],
   fontCatalog: cloneFontCatalog(template.fontCatalog ?? []),

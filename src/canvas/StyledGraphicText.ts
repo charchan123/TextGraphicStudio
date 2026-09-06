@@ -1,5 +1,6 @@
 import { FabricText, Gradient, util, type TextStyleDeclaration } from 'fabric';
 import { resolveFontStack } from '@/src/constants/editor';
+import { characterSizeMultiplier } from '@/src/services/characterScale';
 import type { FillStyle, GraphicTextObject } from '@/src/types/editor';
 
 type RangeDeclaration = TextStyleDeclaration & {
@@ -261,6 +262,15 @@ export const applyTextRanges = (text: StyledGraphicText, model: GraphicTextObjec
   let offset = 0;
   graphemes.forEach((grapheme, index) => {
     const end = offset + grapheme.length;
+    if (grapheme !== '\n') {
+      // Font size participates in Fabric's native grapheme measurement. Applying
+      // category size here makes every following glyph consume the accumulated
+      // final advance, and lets Fabric align from the measured final line width.
+      const multiplier = characterSizeMultiplier(grapheme, model.characterScale);
+      if (Math.abs(multiplier - 1) > 0.0001) {
+        text.setSelectionStyles({ fontSize: model.typography.fontSize * multiplier }, index, index + 1);
+      }
+    }
     for (const range of model.partialStyles) {
       if (range.end <= offset || range.start >= end || grapheme === '\n') continue;
       const declaration: RangeDeclaration = {};

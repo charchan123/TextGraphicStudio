@@ -1,4 +1,4 @@
-import type { GraphicTextObject, PartialStrokeLayers, StrokeLayers, StrokeLayerKey, StrokeStyle } from '@/src/types/editor';
+import type { GraphicTextObject, PartialStrokeLayers, PartialTextStyle, StrokeLayers, StrokeLayerKey, StrokeStyle } from '@/src/types/editor';
 
 export const STROKE_KEYS: StrokeLayerKey[] = ['1', '2', '3'];
 export const EMPTY_THIRD_STROKE: StrokeStyle = { enabled: false, color: '#000000', width: 4 };
@@ -65,4 +65,85 @@ export const maxVisibleStrokeWidth = (model: GraphicTextObject): number => {
   const points = new Set([0, ...model.partialStyles.flatMap((range) => [range.start, range.end])]);
   points.forEach((point) => { if (point < model.text.length) width = Math.max(width, visibleStrokeWidth(effectiveStrokesAt(model, point, point + 1))); });
   return width;
+};
+
+export type PartialStrokeEnabledAction = 'keep' | 'inherit' | 'on' | 'off';
+export type PartialStrokeValueAction = 'keep' | 'inherit' | 'change';
+export interface PartialStrokeEdit {
+  enabled: PartialStrokeEnabledAction;
+  color: PartialStrokeValueAction;
+  width: PartialStrokeValueAction;
+  colorValue: string;
+  widthValue: number;
+}
+export type PartialStrokeEdits = Record<StrokeLayerKey, PartialStrokeEdit>;
+
+export const createPartialStrokeEdits = (model: GraphicTextObject, start: number, end: number): PartialStrokeEdits => {
+  const layers = strokeLayersInRange(model, start, end)[0] ?? getStrokeLayers(model);
+  return Object.fromEntries(STROKE_KEYS.map((key, index) => [key, {
+    enabled: 'keep', color: 'keep', width: 'keep',
+    colorValue: layers[index].color, widthValue: layers[index].width,
+  }])) as PartialStrokeEdits;
+};
+
+const hasPartialProperties = (style: PartialTextStyle): boolean =>
+  Object.entries(style).some(([key, value]) => key !== 'start' && key !== 'end' && value !== undefined);
+
+const cloneRawPartialStrokes = (layers?: PartialStrokeLayers): PartialStrokeLayers | undefined => layers
+  ? Object.fromEntries(STROKE_KEYS.filter((key) => layers[key]).map((key) => [key, { ...layers[key] }]))
+  : undefined;
+
+const removeStrokeLeaf = (
+  styles: PartialTextStyle[], start: number, end: number, layerKey: StrokeLayerKey, property: keyof StrokeStyle,
+): PartialTextStyle[] => styles.flatMap((style) => {
+  if (style.end <= start || style.start >= end || style.strokes?.[layerKey]?.[property] === undefined) return [style];
+  const pieces: PartialTextStyle[] = [];
+  if (style.start < start) pieces.push({ ...style, end: start, strokes: cloneRawPartialStrokes(style.strokes) });
+  const middle: PartialTextStyle = { ...style, start: Math.max(style.start, start), end: Math.min(style.end, end), strokes: cloneRawPartialStrokes(style.strokes) };
+  const strokes = middle.strokes;
+  if (strokes?.[layerKey]) {
+    const layer = { ...strokes[layerKey] };
+    delete layer[property];
+    if (Object.keys(layer).length) strokes[layerKey] = layer; else delete strokes[layerKey];
+    if (!Object.keys(strokes).length) delete middle.strokes;
+  }
+  if (hasPartialProperties(middle)) pieces.push(middle);
+  if (style.end > end) pieces.push({ ...style, start: end, strokes: cloneRawPartialStrokes(style.strokes) });
+  return pieces;
+});
+
+export const hasPartialStrokeEdits = (edits: PartialStrokeEdits): boolean => STROKE_KEYS.some((key) => {
+  const edit = edits[key];
+  return edit.enabled !== 'keep' || edit.color !== 'keep' || edit.width !== 'keep';
+});
+
+/** Apply only requested leaves. `inherit` removes that leaf without touching neighboring partial properties. */
+export const applyPartialStrokeEdits = (
+  styles: PartialTextStyle[], start: number, end: number, edits: PartialStrokeEdits,
+): PartialTextStyle[] => {
+  if (start >= end) return styles;
+  let next = styles;
+  STROKE_KEYS.forEach((key) => {
+    const edit = edits[key];
+    if (edit.enabled === 'inherit') next = removeStrokeLeaf(next, start, end, key, 'enabled');
+    if (edit.color === 'inherit') next = removeStrokeLeaf(next, start, end, key, 'color');
+    if (edit.width === 'inherit') next = removeStrokeLeaf(next, start, end, key, 'width');
+  });
+  const patch: PartialStrokeLayers = {};
+  STROKE_KEYS.forEach((key, index) => {
+    const edit = edits[key];
+    const layer: Partial<StrokeStyle> = {};
+    if (edit.enabled === 'on') layer.enabled = true;
+    if (edit.enabled === 'off') layer.enabled = false;
+    if (edit.color === 'change') layer.color = edit.colorValue;
+    if (edit.width === 'change') layer.width = edit.widthValue;
+    if (Object.keys(layer).length) patch[key] = layer;
+    if (edit.enabled === 'off') {
+      for (let outer = index + 1; outer < STROKE_KEYS.length; outer += 1) {
+        patch[STROKE_KEYS[outer]] = { ...patch[STROKE_KEYS[outer]], enabled: false };
+      }
+    }
+  });
+  if (Object.keys(patch).length) next = [...next, { start, end, strokes: clonePartialStrokes(patch) }];
+  return next;
 };

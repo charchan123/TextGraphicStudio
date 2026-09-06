@@ -109,6 +109,8 @@ export function TextBackgroundEditor({ selected }: { selected: GraphicTextObject
       {type !== 'none' && <>
         <SliderField label="左右の余白" value={background.paddingX} min={0} max={160} unit="px" disabled={!background.enabled} onBegin={editor.begin} onPreview={(paddingX) => editor.preview((object) => ({ ...object, background: { ...object.background, paddingX } }))} onCommit={editor.finish} />
         <SliderField label="上下の余白" value={background.paddingY} min={0} max={100} unit="px" disabled={!background.enabled} onBegin={editor.begin} onPreview={(paddingY) => editor.preview((object) => ({ ...object, background: { ...object.background, paddingY } }))} onCommit={editor.finish} />
+        <SliderField label="背景の横位置" value={background.offsetX ?? 0} min={-500} max={500} unit="px" disabled={!background.enabled} onBegin={editor.begin} onPreview={(offsetX) => editor.preview((object) => ({ ...object, background: { ...object.background, offsetX } }))} onCommit={editor.finish} />
+        <SliderField label="背景の縦位置" value={background.offsetY ?? 0} min={-500} max={500} unit="px" disabled={!background.enabled} onBegin={editor.begin} onPreview={(offsetY) => editor.preview((object) => ({ ...object, background: { ...object.background, offsetY } }))} onCommit={editor.finish} />
         <SliderField label="背景の追加角度" value={background.rotation} min={-45} max={45} step={0.1} unit="°" disabled={!background.enabled} onBegin={editor.begin} onPreview={(rotation) => editor.preview((object) => ({ ...object, background: { ...object.background, rotation } }))} onCommit={editor.finish} />
       </>}
       <div className="background-presets">

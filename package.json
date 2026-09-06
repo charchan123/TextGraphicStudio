@@ -15,6 +15,7 @@
     "test:browser:phase2": "node scripts/phase2-browser-check.mjs",
     "test:browser:phase25": "node scripts/phase25-browser-check.mjs",
     "test:browser:phase26": "node scripts/phase26-browser-check.mjs && node scripts/phase26-svg-check.mjs",
+    "test:browser:phase27": "node scripts/phase27-browser-check.mjs",
     "format": "oxfmt"
   },
   "dependencies": {

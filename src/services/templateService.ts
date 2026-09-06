@@ -112,6 +112,7 @@ const isTemplate = (value: unknown): value is GraphicTextTemplateV1 => {
     isFiniteNumber(characterScale.katakana) &&
     isFiniteNumber(characterScale.latin) &&
     isFiniteNumber(characterScale.number) &&
+    (characterScale.symbol === undefined || isFiniteNumber(characterScale.symbol)) &&
     Array.isArray(value.partialStyles) && value.partialStyles.every(isPartialTextStyle) &&
     (value.palette === undefined || isColorPalette(value.palette)) &&
     (value.fontCatalog === undefined || (Array.isArray(value.fontCatalog) && value.fontCatalog.every(isFontReference))) &&

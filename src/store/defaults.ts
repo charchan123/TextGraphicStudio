@@ -1,4 +1,4 @@
-import type { ColorPalette, FontReference, GraphicTextObject, ProjectDocument } from '@/src/types/editor';
+import type { ColorPalette, FontReference, GraphicTextObject, ProjectDocument, TextDesignDefaults } from '@/src/types/editor';
 import { clonePartialStrokes, getStrokeLayers } from '@/src/services/strokes';
 
 export const DEFAULT_COLOR_PALETTE: ColorPalette = [
@@ -10,10 +10,7 @@ export const DEFAULT_COLOR_PALETTE: ColorPalette = [
   '#F08A16',
 ];
 
-export type GraphicTextPreset = Omit<
-  GraphicTextObject,
-  'id' | 'name' | 'text' | 'position' | 'zIndex'
->;
+export type GraphicTextPreset = TextDesignDefaults;
 
 /**
  * The single source of truth for newly-created graphic text styling.
@@ -42,6 +39,7 @@ export const DEFAULT_GRAPHIC_TEXT_PRESET: GraphicTextPreset = {
     katakana: 0.9,
     latin: 1,
     number: 1.15,
+    symbol: 1,
   },
   fill: { type: 'solid', color: '#000000' },
   stroke: { enabled: true, color: '#FFFFFF', width: 8 },
@@ -61,6 +59,8 @@ export const DEFAULT_GRAPHIC_TEXT_PRESET: GraphicTextPreset = {
     rotation: -1.5,
     paddingX: 38,
     paddingY: 22,
+    offsetX: 0,
+    offsetY: 0,
     roughness: 0.55,
     seed: 1847,
     imageMode: 'fixed',
@@ -84,6 +84,7 @@ export const createGraphicText = (
   canvasWidth: number,
   canvasHeight: number,
   preset: GraphicTextPreset = DEFAULT_GRAPHIC_TEXT_PRESET,
+  preserveBackgroundSeed = false,
 ): GraphicTextObject => {
   const offset = Math.min(index, 5) * 28;
   return {
@@ -112,7 +113,7 @@ export const createGraphicText = (
     shadow: { ...preset.shadow },
     background: {
       ...preset.background,
-      seed: preset.background.seed + index * 137,
+      seed: preserveBackgroundSeed ? preset.background.seed : preset.background.seed + index * 137,
       followSettings: preset.background.followSettings
         ? { ...preset.background.followSettings }
         : undefined,

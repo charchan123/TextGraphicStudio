@@ -5,8 +5,9 @@ import { create } from 'zustand';
 
 import { HISTORY_LIMIT } from '@/src/constants/editor';
 import { cloneBackground, cloneFill, cloneFontCatalog, clonePartialStyle } from '@/src/services/documentData';
-import { createGraphicText, createInitialProject, createObjectId } from '@/src/store/defaults';
+import { createGraphicText, createInitialProject, createObjectId, DEFAULT_GRAPHIC_TEXT_PRESET } from '@/src/store/defaults';
 import { getStrokeLayers } from '@/src/services/strokes';
+import { cloneTextDesignDefaults, textDesignDefaultsEqual, toTextDesignDefaults } from '@/src/services/textDefaults';
 import type {
   AppNotice,
   BackgroundImageData,
@@ -15,6 +16,7 @@ import type {
   GraphicTextObject,
   GraphicTextTemplateV1,
   ProjectDocument,
+  TextDesignDefaults,
 } from '@/src/types/editor';
 
 type ObjectUpdater = (object: GraphicTextObject) => GraphicTextObject;
@@ -31,10 +33,12 @@ interface EditorState {
   fabricCanvas: FabricCanvas | null;
   zoomPercent: number;
   notice: AppNotice | null;
+  lastUsedTextDefaults: TextDesignDefaults;
   setFabricCanvas: (canvas: FabricCanvas | null) => void;
   setZoomPercent: (percent: number) => void;
   setNotice: (message: string, kind?: AppNotice['kind']) => void;
   clearNotice: () => void;
+  hydrateLastUsedTextDefaults: (defaults: TextDesignDefaults) => void;
   selectObject: (id: string | null) => void;
   beginTransaction: () => void;
   finishTransaction: () => void;
@@ -82,12 +86,14 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   fabricCanvas: null,
   zoomPercent: 100,
   notice: null,
+  lastUsedTextDefaults: cloneTextDesignDefaults(DEFAULT_GRAPHIC_TEXT_PRESET),
 
   setFabricCanvas: (fabricCanvas) => set({ fabricCanvas }),
   setZoomPercent: (zoomPercent) => set({ zoomPercent }),
   setNotice: (message, kind = 'info') =>
     set({ notice: { id: Date.now(), kind, message } }),
   clearNotice: () => set({ notice: null }),
+  hydrateLastUsedTextDefaults: (lastUsedTextDefaults) => set({ lastUsedTextDefaults: cloneTextDesignDefaults(lastUsedTextDefaults) }),
   selectObject: (selectedId) => set({ selectedId }),
 
   beginTransaction: () =>
@@ -109,19 +115,25 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     set((state) => {
       const existing = state.project.objects.find((object) => object.id === id);
       if (!existing) return state;
+      const updated = updater(existing);
+      const previousDefaults = toTextDesignDefaults(existing);
+      const nextDefaults = toTextDesignDefaults(updated);
       const nextProject = stampProject({
         ...state.project,
         objects: state.project.objects.map((object) =>
-          object.id === id ? updater(object) : object,
+          object.id === id ? updated : object,
         ),
       });
-      if (!recordHistory) return { project: nextProject };
+      const defaultsPatch = textDesignDefaultsEqual(previousDefaults, nextDefaults)
+        ? {} : { lastUsedTextDefaults: nextDefaults };
+      if (!recordHistory) return { project: nextProject, ...defaultsPatch };
       const historyBase = state.transactionBase ?? state.project;
       return {
         project: nextProject,
         past: pushHistory(state.past, historyBase),
         future: [],
         transactionBase: null,
+        ...defaultsPatch,
       };
     }),
 
@@ -149,6 +161,8 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         state.project.objects.length,
         state.project.canvas.width,
         state.project.canvas.height,
+        state.lastUsedTextDefaults,
+        true,
       );
       return {
         project: stampProject({
@@ -352,6 +366,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       partialStyles: template.partialStyles.map(clonePartialStyle),
       position: template.includePosition && template.position ? { ...template.position } : existing.position,
     };
+    const lastUsedTextDefaults = toTextDesignDefaults(updated);
     return {
       project: stampProject({
         ...state.project,
@@ -362,6 +377,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       past: pushHistory(state.past, state.transactionBase ?? state.project),
       future: [],
       transactionBase: null,
+      lastUsedTextDefaults,
     };
   }),
 
@@ -393,12 +409,14 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       const selectedId = previous.objects.some((object) => object.id === state.selectedId)
         ? state.selectedId
         : previous.objects.at(-1)?.id ?? null;
+      const selected = previous.objects.find((object) => object.id === selectedId);
       return {
         project: previous,
         selectedId,
         past: state.past.slice(0, -1),
         future: [state.project, ...state.future].slice(0, HISTORY_LIMIT),
         transactionBase: null,
+        lastUsedTextDefaults: selected ? toTextDesignDefaults(selected) : state.lastUsedTextDefaults,
       };
     }),
 
@@ -409,12 +427,14 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       const selectedId = next.objects.some((object) => object.id === state.selectedId)
         ? state.selectedId
         : next.objects.at(-1)?.id ?? null;
+      const selected = next.objects.find((object) => object.id === selectedId);
       return {
         project: next,
         selectedId,
         past: pushHistory(state.past, state.project),
         future: state.future.slice(1),
         transactionBase: null,
+        lastUsedTextDefaults: selected ? toTextDesignDefaults(selected) : state.lastUsedTextDefaults,
       };
     }),
 }));

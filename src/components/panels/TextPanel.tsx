@@ -13,7 +13,7 @@ import { PartialStyleEditor } from '@/src/components/panels/PartialStyleEditor';
 import { adjustRangesForTextEdit } from '@/src/services/partialStyles';
 import { useObjectEditor } from '@/src/hooks/useObjectEditor';
 import { useEditorStore } from '@/src/store/editorStore';
-import type { FontStyleMode, TextAlignment } from '@/src/types/editor';
+import type { CharacterScaleStyle, FontStyleMode, TextAlignment } from '@/src/types/editor';
 
 const ALIGN_OPTIONS: Array<{ value: TextAlignment; label: string }> = [
   { value: 'left', label: '左揃え' },
@@ -25,6 +25,15 @@ const FONT_STYLE_OPTIONS: Array<{ value: FontStyleMode; label: string }> = [
   { value: 'normal', label: '通常' },
   { value: 'italic', label: '斜体' },
   { value: 'slant', label: 'スラント' },
+];
+
+const CHARACTER_SCALE_FIELDS: Array<{ key: keyof CharacterScaleStyle; label: string }> = [
+  { key: 'kanji', label: '漢字' },
+  { key: 'hiragana', label: 'ひらがな' },
+  { key: 'katakana', label: 'カタカナ' },
+  { key: 'number', label: '数字' },
+  { key: 'latin', label: '英字' },
+  { key: 'symbol', label: '記号' },
 ];
 
 export function TextPanel() {
@@ -86,7 +95,7 @@ export function TextPanel() {
               onSelect={(event) => setRange({ id: selected.id, text: selected.text, start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd })}
               onBlur={editor.finish}
             />
-            <PartialStyleEditor key={selected.id} selected={selected} start={range.id === selected.id && range.text === selected.text ? range.start : 0} end={range.id === selected.id && range.text === selected.text ? range.end : 0} />
+            <PartialStyleEditor key={`${selected.id}:${range.start}:${range.end}:${range.text === selected.text}`} selected={selected} start={range.id === selected.id && range.text === selected.text ? range.start : 0} end={range.id === selected.id && range.text === selected.text ? range.end : 0} />
           </section>
 
           <section className="panel-section">
@@ -257,6 +266,27 @@ export function TextPanel() {
               }))}
               onCommit={editor.finish}
             />
+            <details className="character-scale-editor">
+              <summary>文字種別サイズ倍率</summary>
+              <p className="panel-note">部分文字サイズが未指定の文字だけ、基本文字サイズへ倍率を適用します。</p>
+              <div className="character-scale-fields">
+                {CHARACTER_SCALE_FIELDS.map(({ key, label }) => <SliderField
+                  key={key}
+                  label={label}
+                  value={(selected.characterScale[key] ?? 1) * 100}
+                  min={50}
+                  max={150}
+                  step={1}
+                  unit="%"
+                  onBegin={editor.begin}
+                  onPreview={(percent) => editor.preview((object) => ({
+                    ...object,
+                    characterScale: { ...object.characterScale, [key]: percent / 100 },
+                  }))}
+                  onCommit={editor.finish}
+                />)}
+              </div>
+            </details>
             <SegmentedControl
               label="文字揃え"
               value={selected.typography.textAlign}

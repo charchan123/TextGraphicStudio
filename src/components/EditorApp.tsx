@@ -22,7 +22,7 @@ import { useWebMcp } from '@/src/hooks/useWebMcp';
 import { exportAllGraphicsPng, exportGraphicPng, exportProjectPng } from '@/src/services/exportService';
 import { loadBackgroundFile } from '@/src/services/imageService';
 import { getFontRestoreWarning } from '@/src/services/fontService';
-import { clearAutosave, loadAutosave, saveAutosave } from '@/src/services/persistence';
+import { clearAutosave, loadAutosave, loadLastUsedTextDefaults, saveAutosave, saveLastUsedTextDefaults } from '@/src/services/persistence';
 import { loadPalettePreference, savePalettePreference } from '@/src/services/palettePreference';
 import { createTemplate, downloadTemplate, readTemplateFile } from '@/src/services/templateService';
 import { createInitialProject } from '@/src/store/defaults';
@@ -58,6 +58,7 @@ export function EditorApp() {
   const createNewProject = useEditorStore((state) => state.createNewProject);
   const setBackgroundImage = useEditorStore((state) => state.setBackgroundImage);
   const applyTemplate = useEditorStore((state) => state.applyTemplate);
+  const hydrateLastUsedTextDefaults = useEditorStore((state) => state.hydrateLastUsedTextDefaults);
   const selected = project.objects.find((object) => object.id === selectedId) ?? null;
 
   useKeyboardShortcuts();
@@ -65,9 +66,10 @@ export function EditorApp() {
 
   useEffect(() => {
     let cancelled = false;
-    void loadAutosave()
-      .then((savedProject) => {
+    void Promise.all([loadAutosave(), loadLastUsedTextDefaults().catch(() => null)])
+      .then(([savedProject, lastUsedTextDefaults]) => {
         if (cancelled) return;
+        if (lastUsedTextDefaults) hydrateLastUsedTextDefaults(lastUsedTextDefaults);
         if (savedProject) setRestoreCandidate(savedProject);
         else {
           replaceProject({ ...useEditorStore.getState().project, palette: loadPalettePreference() });
@@ -83,7 +85,7 @@ export function EditorApp() {
     return () => {
       cancelled = true;
     };
-  }, [replaceProject, setNotice]);
+  }, [hydrateLastUsedTextDefaults, replaceProject, setNotice]);
 
   useEffect(() => {
     savePalettePreference(project.palette);
@@ -117,6 +119,29 @@ export function EditorApp() {
       unsubscribe();
       document.removeEventListener('visibilitychange', flushWhenHidden);
       if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [persistenceReady]);
+
+  useEffect(() => {
+    if (!persistenceReady) return;
+    let timer: number | null = null;
+    let previous = useEditorStore.getState().lastUsedTextDefaults;
+    const schedule = (defaults: typeof previous) => {
+      if (timer !== null) window.clearTimeout(timer);
+      timer = window.setTimeout(() => void saveLastUsedTextDefaults(defaults).catch(() => undefined), 500);
+    };
+    schedule(previous);
+    const unsubscribe = useEditorStore.subscribe((state) => {
+      if (state.lastUsedTextDefaults === previous) return;
+      previous = state.lastUsedTextDefaults;
+      schedule(previous);
+    });
+    return () => {
+      unsubscribe();
+      if (timer !== null) {
+        window.clearTimeout(timer);
+        void saveLastUsedTextDefaults(previous).catch(() => undefined);
+      }
     };
   }, [persistenceReady]);
 
@@ -226,6 +251,9 @@ export function EditorApp() {
       data-selected-font-style={selected?.typography.fontStyle ?? 'normal'}
       data-selected-font-ref-id={selected?.typography.fontRefId ?? ''}
       data-selected-background-image-mode={selected?.background.imageMode ?? 'fixed'}
+      data-selected-background-offset-x={selected?.background.offsetX ?? 0}
+      data-selected-background-offset-y={selected?.background.offsetY ?? 0}
+      data-selected-character-scale={selected ? JSON.stringify(selected.characterScale) : ''}
     >
       <EditorToolbar
         busy={busy}

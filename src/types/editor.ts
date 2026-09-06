@@ -62,6 +62,8 @@ export interface CharacterScaleStyle {
   katakana: number;
   latin: number;
   number: number;
+  /** Punctuation and non-emoji symbols. */
+  symbol: number;
 }
 
 export interface StrokeStyle {
@@ -92,6 +94,9 @@ export interface RoughBandStyle {
   rotation: number;
   paddingX: number;
   paddingY: number;
+  /** Background-only displacement in the graphic text object's local coordinates. */
+  offsetX?: number;
+  offsetY?: number;
   roughness: number;
   seed: number;
   image?: TextBackgroundImage;
@@ -224,6 +229,12 @@ export interface GraphicTextTemplateV1 {
   fontCatalog?: FontReference[];
   position?: Point2D;
 }
+
+/** Styling copied into newly-created text. Content, position and range styles are excluded by the factory. */
+export type TextDesignDefaults = Omit<
+  GraphicTextObject,
+  'id' | 'name' | 'text' | 'position' | 'zIndex'
+>;
 
 export type NoticeKind = 'success' | 'warning' | 'error' | 'info';
 
