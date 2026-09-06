@@ -7,6 +7,7 @@ type RangeDeclaration = TextStyleDeclaration & {
   letterSpacing?: number;
   glyphScaleX?: number;
   glyphScaleY?: number;
+  deltaY?: number;
 };
 
 type LinearCoords = { x1: number; y1: number; x2: number; y2: number };
@@ -137,7 +138,8 @@ export class StyledGraphicText extends FabricText {
       const declaration = style as RangeDeclaration;
       return declaration.letterSpacing !== undefined
         || declaration.glyphScaleX !== undefined
-        || declaration.glyphScaleY !== undefined;
+        || declaration.glyphScaleY !== undefined
+        || declaration.deltaY !== undefined;
     });
     const original = this.charSpacing;
     try {
@@ -194,14 +196,27 @@ export class StyledGraphicText extends FabricText {
     const layouts: Array<{ width: number; height: number; centerX: number; centerY: number }> = [];
     let top = -this.height / 2;
     this._textLines.forEach((line, lineIndex) => {
-      const height = this.getHeightOfLine(lineIndex) / this.lineHeight;
+      const baseHeight = this.getHeightOfLine(lineIndex) / this.lineHeight;
       const width = this.measureLine(lineIndex).width;
       if (line.length > 0 && width > 0) {
+        let minTop = 0;
+        let maxBottom = baseHeight;
+        for (let character = 0; character < line.length; character += 1) {
+          const complete = this.getCompleteStyleDeclaration(lineIndex, character);
+          const height = Number(complete.fontSize ?? this.fontSize) * this._fontSizeMult
+            * this.glyphScaleAt(lineIndex, character).y;
+          const deltaY = Number((this._getStyleDeclaration(lineIndex, character) as RangeDeclaration).deltaY ?? 0);
+          const glyphTop = baseHeight * (1 - this._fontSizeFraction)
+            - height * (1 - this._fontSizeFraction) + deltaY;
+          minTop = Math.min(minTop, glyphTop);
+          maxBottom = Math.max(maxBottom, glyphTop + height);
+        }
+        const height = maxBottom - minTop;
         layouts.push({
           width,
           height,
           centerX: -this.width / 2 + this._getLineLeftOffset(lineIndex) + width / 2,
-          centerY: top + height / 2,
+          centerY: top + minTop + height / 2,
         });
       }
       top += this.getHeightOfLine(lineIndex);
@@ -227,9 +242,10 @@ export class StyledGraphicText extends FabricText {
             Number(complete.fontSize ?? this.fontSize) * this._fontSizeMult * scale.y,
           );
           const baseline = top + this.rawLineHeight(lineIndex) * (1 - this._fontSizeFraction);
+          const deltaY = Number((this._getStyleDeclaration(lineIndex, charIndex) as RangeDeclaration).deltaY ?? 0);
           return {
             left: lineLeft + box.left,
-            top: baseline - height * (1 - this._fontSizeFraction),
+            top: baseline - height * (1 - this._fontSizeFraction) + deltaY,
             width: Math.max(1, box.width - spacing),
             height,
           };
@@ -282,6 +298,7 @@ export const applyTextRanges = (text: StyledGraphicText, model: GraphicTextObjec
       if (range.letterSpacing !== undefined) declaration.letterSpacing = range.letterSpacing;
       if (range.glyphScaleX !== undefined) declaration.glyphScaleX = range.glyphScaleX;
       if (range.glyphScaleY !== undefined) declaration.glyphScaleY = range.glyphScaleY;
+      if (range.glyphOffsetY !== undefined) declaration.deltaY = range.glyphOffsetY;
       if (range.fill) fills.set(index, range.fill);
       text.setSelectionStyles(declaration, index, index + 1);
     }

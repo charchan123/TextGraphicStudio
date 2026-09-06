@@ -50,6 +50,7 @@ export const isPartialTextStyle = (value: unknown): value is PartialTextStyle =>
   && (value.fontStyle === undefined || value.fontStyle === 'normal' || value.fontStyle === 'italic')
   && (value.glyphScaleX === undefined || bounded(value.glyphScaleX, 0.5, 1.5))
   && (value.glyphScaleY === undefined || bounded(value.glyphScaleY, 0.5, 1.5))
+  && (value.glyphOffsetY === undefined || bounded(value.glyphOffsetY, -100, 100))
   && (value.strokes === undefined || isPartialStrokes(value.strokes));
 
 export const isTextBackground = (value: unknown): value is RoughBandStyle => isRecord(value)

@@ -22,7 +22,13 @@ const readSliderValue = (value: number | readonly number[]): number =>
 
 const numericDraftPattern = /^-?(?:\d+)?(?:\.\d*)?$/;
 
-const formatValue = (value: number): string => String(value);
+// Remove floating-point display noise (for example 110.00000000000001) without
+// changing the value passed to preview/persistence. While editing, the draft is
+// shown verbatim so intermediate input such as `110.` remains stable.
+const formatValue = (value: number): string => {
+  const compact = Number(value.toPrecision(12));
+  return String(Object.is(compact, -0) ? 0 : compact);
+};
 
 export function SliderField({
   label,

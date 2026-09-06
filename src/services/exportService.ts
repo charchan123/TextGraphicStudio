@@ -67,8 +67,11 @@ const renderGraphicDataUrl = async (object: GraphicTextObject): Promise<string> 
   const group = rendered.group;
   group.setCoords();
   const bounds = group.getBoundingRect();
+  const glyphOffsetMargin = Math.max(0, ...object.partialStyles.map((range) => Math.abs(range.glyphOffsetY ?? 0)))
+    * Math.max(Math.abs(object.transform.scaleX), Math.abs(object.transform.scaleY));
   const safeMargin = Math.ceil(
     24 +
+      glyphOffsetMargin +
       maxVisibleStrokeWidth(object) * 3 * Math.max(Math.abs(object.transform.scaleX), Math.abs(object.transform.scaleY)) +
       object.shadow.blur * 2 +
       Math.abs(object.shadow.offsetX) +

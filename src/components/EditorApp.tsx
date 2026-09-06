@@ -22,7 +22,15 @@ import { useWebMcp } from '@/src/hooks/useWebMcp';
 import { exportAllGraphicsPng, exportGraphicPng, exportProjectPng } from '@/src/services/exportService';
 import { loadBackgroundFile } from '@/src/services/imageService';
 import { getFontRestoreWarning } from '@/src/services/fontService';
-import { clearAutosave, loadAutosave, loadLastUsedTextDefaults, saveAutosave, saveLastUsedTextDefaults } from '@/src/services/persistence';
+import {
+  clearAutosave,
+  loadAutosave,
+  loadLastUsedTextDefaults,
+  loadQuickPartialPresets,
+  saveAutosave,
+  saveLastUsedTextDefaults,
+  saveQuickPartialPresets,
+} from '@/src/services/persistence';
 import { loadPalettePreference, savePalettePreference } from '@/src/services/palettePreference';
 import { createTemplate, downloadTemplate, readTemplateFile } from '@/src/services/templateService';
 import { createInitialProject } from '@/src/store/defaults';
@@ -52,6 +60,7 @@ export function EditorApp() {
   const selectedId = useEditorStore((state) => state.selectedId);
   const zoomPercent = useEditorStore((state) => state.zoomPercent);
   const notice = useEditorStore((state) => state.notice);
+  const quickPartialPresetCount = useEditorStore((state) => state.quickPartialPresets.length);
   const setNotice = useEditorStore((state) => state.setNotice);
   const clearNotice = useEditorStore((state) => state.clearNotice);
   const replaceProject = useEditorStore((state) => state.replaceProject);
@@ -59,6 +68,7 @@ export function EditorApp() {
   const setBackgroundImage = useEditorStore((state) => state.setBackgroundImage);
   const applyTemplate = useEditorStore((state) => state.applyTemplate);
   const hydrateLastUsedTextDefaults = useEditorStore((state) => state.hydrateLastUsedTextDefaults);
+  const hydrateQuickPartialPresets = useEditorStore((state) => state.hydrateQuickPartialPresets);
   const selected = project.objects.find((object) => object.id === selectedId) ?? null;
 
   useKeyboardShortcuts();
@@ -66,10 +76,15 @@ export function EditorApp() {
 
   useEffect(() => {
     let cancelled = false;
-    void Promise.all([loadAutosave(), loadLastUsedTextDefaults().catch(() => null)])
-      .then(([savedProject, lastUsedTextDefaults]) => {
+    void Promise.all([
+      loadAutosave(),
+      loadLastUsedTextDefaults().catch(() => null),
+      loadQuickPartialPresets().catch(() => []),
+    ])
+      .then(([savedProject, lastUsedTextDefaults, quickPartialPresets]) => {
         if (cancelled) return;
         if (lastUsedTextDefaults) hydrateLastUsedTextDefaults(lastUsedTextDefaults);
+        hydrateQuickPartialPresets(quickPartialPresets);
         if (savedProject) setRestoreCandidate(savedProject);
         else {
           replaceProject({ ...useEditorStore.getState().project, palette: loadPalettePreference() });
@@ -85,7 +100,7 @@ export function EditorApp() {
     return () => {
       cancelled = true;
     };
-  }, [hydrateLastUsedTextDefaults, replaceProject, setNotice]);
+  }, [hydrateLastUsedTextDefaults, hydrateQuickPartialPresets, replaceProject, setNotice]);
 
   useEffect(() => {
     savePalettePreference(project.palette);
@@ -119,6 +134,29 @@ export function EditorApp() {
       unsubscribe();
       document.removeEventListener('visibilitychange', flushWhenHidden);
       if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [persistenceReady]);
+
+  useEffect(() => {
+    if (!persistenceReady) return;
+    let timer: number | null = null;
+    let previous = useEditorStore.getState().quickPartialPresets;
+    const schedule = (presets: typeof previous) => {
+      if (timer !== null) window.clearTimeout(timer);
+      timer = window.setTimeout(() => void saveQuickPartialPresets(presets).catch(() => undefined), 500);
+    };
+    schedule(previous);
+    const unsubscribe = useEditorStore.subscribe((state) => {
+      if (state.quickPartialPresets === previous) return;
+      previous = state.quickPartialPresets;
+      schedule(previous);
+    });
+    return () => {
+      unsubscribe();
+      if (timer !== null) {
+        window.clearTimeout(timer);
+        void saveQuickPartialPresets(previous).catch(() => undefined);
+      }
     };
   }, [persistenceReady]);
 
@@ -254,6 +292,7 @@ export function EditorApp() {
       data-selected-background-offset-x={selected?.background.offsetX ?? 0}
       data-selected-background-offset-y={selected?.background.offsetY ?? 0}
       data-selected-character-scale={selected ? JSON.stringify(selected.characterScale) : ''}
+      data-quick-partial-preset-count={quickPartialPresetCount}
     >
       <EditorToolbar
         busy={busy}

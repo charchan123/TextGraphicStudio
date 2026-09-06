@@ -1,5 +1,6 @@
-import type { BackgroundPreset, ProjectDocument, TextDesignDefaults } from '@/src/types/editor';
+import type { BackgroundPreset, ProjectDocument, QuickPartialPreset, QuickPartialStyleOperation, TextDesignDefaults } from '@/src/types/editor';
 import { normalizeProjectDocument, normalizeTextBackground } from '@/src/services/documentData';
+import { cloneQuickPartialPreset, hasQuickPartialOperation, MAX_QUICK_PARTIAL_PRESETS } from '@/src/services/quickPartialPresets';
 import { toTextDesignDefaults } from '@/src/services/textDefaults';
 import { isStrokeLayers } from '@/src/services/styleValidation';
 import { bounded, isColorPalette, isFillStyle, isFontReference, isPartialTextStyle, isSafeFontText, isTextBackground } from '@/src/services/styleValidation';
@@ -8,6 +9,7 @@ const DATABASE_NAME = 'text-graphic-studio';
 const STORE_NAME = 'projects';
 const AUTOSAVE_KEY = 'autosave';
 const LAST_USED_TEXT_DEFAULTS_KEY = 'last-used-text-defaults';
+const QUICK_PARTIAL_PRESETS_KEY = 'quick-partial-presets';
 const PRESETS_STORE = 'background-presets';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -113,6 +115,51 @@ export const loadLastUsedTextDefaults = async (): Promise<TextDesignDefaults | n
   };
   if (!isProjectDocument(probe)) return null;
   return toTextDesignDefaults(normalizeProjectDocument(probe).objects[0]);
+};
+
+const PARTIAL_STYLE_OPERATION_KEYS = new Set([
+  'fill', 'fontScale', 'fontSize', 'letterSpacing', 'fontWeight', 'fontFamily', 'fontRefId', 'fontStyle', 'glyphScaleX', 'glyphScaleY',
+]);
+
+const isQuickPartialOperation = (value: unknown): value is QuickPartialStyleOperation => {
+  if (!isRecord(value) || !isRecord(value.style)) return false;
+  if (!Object.keys(value.style).every((key) => PARTIAL_STYLE_OPERATION_KEYS.has(key))) return false;
+  if (!isPartialTextStyle({ ...value.style, start: 0, end: 1 })) return false;
+  if (value.strokes === undefined) return true;
+  if (!isRecord(value.strokes)) return false;
+  return Object.entries(value.strokes).every(([key, operation]) => {
+    if (!['1', '2', '3'].includes(key) || !isRecord(operation)) return false;
+    if (!Object.keys(operation).every((property) => ['enabled', 'color', 'width'].includes(property))) return false;
+    if (operation.enabled !== undefined && (typeof operation.enabled !== 'string' || !['inherit', 'on', 'off'].includes(operation.enabled))) return false;
+    if (operation.color !== undefined && (!isRecord(operation.color)
+      || typeof operation.color.action !== 'string' || !['inherit', 'change'].includes(operation.color.action)
+      || (operation.color.action === 'change' && !isFillStyle({ type: 'solid', color: operation.color.value })))) return false;
+    if (operation.width !== undefined && (!isRecord(operation.width)
+      || typeof operation.width.action !== 'string' || !['inherit', 'change'].includes(operation.width.action)
+      || (operation.width.action === 'change' && !bounded(operation.width.value, 0, 40)))) return false;
+    return true;
+  });
+};
+
+const isQuickPartialPreset = (value: unknown): value is QuickPartialPreset => isRecord(value)
+  && isSafeFontText(value.id)
+  && typeof value.name === 'string' && value.name.trim().length > 0 && value.name.length <= 40
+  && typeof value.createdAt === 'string' && typeof value.updatedAt === 'string'
+  && isQuickPartialOperation(value.operation)
+  && hasQuickPartialOperation(value.operation);
+
+export const saveQuickPartialPresets = async (presets: QuickPartialPreset[]): Promise<void> => {
+  await runRequest('readwrite', (store) => store.put({
+    kind: 'text-graphic-studio-quick-partial-presets',
+    schemaVersion: 1,
+    presets: presets.slice(0, MAX_QUICK_PARTIAL_PRESETS).map(cloneQuickPartialPreset),
+  }, QUICK_PARTIAL_PRESETS_KEY));
+};
+
+export const loadQuickPartialPresets = async (): Promise<QuickPartialPreset[]> => {
+  const value = await runRequest<unknown>('readonly', (store) => store.get(QUICK_PARTIAL_PRESETS_KEY));
+  if (!isRecord(value) || value.kind !== 'text-graphic-studio-quick-partial-presets' || value.schemaVersion !== 1 || !Array.isArray(value.presets)) return [];
+  return value.presets.filter(isQuickPartialPreset).slice(0, MAX_QUICK_PARTIAL_PRESETS).map(cloneQuickPartialPreset);
 };
 
 export const saveBackgroundPreset = async (preset: BackgroundPreset): Promise<void> => {

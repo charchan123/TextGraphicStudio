@@ -148,7 +148,29 @@ export interface PartialTextStyle {
   fontStyle?: 'normal' | 'italic';
   glyphScaleX?: number;
   glyphScaleY?: number;
+  /** Per-range visual baseline correction in pixels. Positive moves glyphs down. */
+  glyphOffsetY?: number;
   strokes?: PartialStrokeLayers;
+}
+
+export interface QuickPartialStrokeOperation {
+  enabled?: 'inherit' | 'on' | 'off';
+  color?: { action: 'inherit' } | { action: 'change'; value: string };
+  width?: { action: 'inherit' } | { action: 'change'; value: number };
+}
+
+/** Range-independent shortcut for the existing partial-style application path. */
+export interface QuickPartialStyleOperation {
+  style: Omit<PartialTextStyle, 'start' | 'end' | 'strokes' | 'glyphOffsetY'>;
+  strokes?: Partial<Record<StrokeLayerKey, QuickPartialStrokeOperation>>;
+}
+
+export interface QuickPartialPreset {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  operation: QuickPartialStyleOperation;
 }
 
 export interface GraphicTextObject {

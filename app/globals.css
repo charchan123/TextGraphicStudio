@@ -96,6 +96,26 @@ button, input, textarea, select { font: inherit; }
 .inline-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-block: 10px; }
 .inline-actions button { flex: 1; padding-inline: 8px; font-size: 12px; }
 .range-reset { width: 100%; font-size: 12px; }
+.quick-partial-presets { margin: 10px 0 12px; padding: 10px; border: 1px solid #d7dfec; border-radius: 8px; background: #fff; }
+.quick-preset-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.quick-preset-heading h3 { font-size: 13px; font-weight: 700; color: #273a5a; }
+.quick-preset-heading span { color: #778398; font-size: 11px; }
+.quick-preset-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.quick-preset-item { position: relative; display: inline-flex; min-width: 0; }
+.quick-preset-apply { max-width: 150px; height: 30px; padding: 0 26px 0 9px; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.quick-preset-menu { position: absolute; top: 0; right: 0; }
+.quick-preset-menu > summary { width: 25px; height: 30px; display: grid; place-items: center; list-style: none; cursor: pointer; color: #66748a; border-left: 1px solid #d9e0ea; }
+.quick-preset-menu > summary::-webkit-details-marker { display: none; }
+.quick-preset-menu > summary svg { width: 14px; height: 14px; }
+.quick-preset-menu > summary:focus-visible { outline: 2px solid #3972f4; outline-offset: -2px; border-radius: 4px; }
+.quick-preset-menu-popup { position: absolute; z-index: 20; top: 32px; right: 0; width: 172px; display: grid; padding: 4px; border: 1px solid #ccd5e3; border-radius: 7px; background: #fff; box-shadow: 0 8px 24px rgb(20 32 55 / 18%); }
+.quick-preset-menu-popup button { border: 0; border-radius: 4px; padding: 7px 8px; background: transparent; color: #30405a; text-align: left; font-size: 12px; cursor: pointer; }
+.quick-preset-menu-popup button:hover, .quick-preset-menu-popup button:focus-visible { background: #edf2fa; outline: none; }
+.quick-preset-menu-popup button.destructive { color: #b4232d; }
+.quick-preset-empty { width: 100%; color: #748197; font-size: 11px; line-height: 1.5; }
+.quick-preset-save { width: 100%; height: 32px; margin-top: 8px; font-size: 12px; }
+.quick-preset-name-input { width: 100%; height: 39px; border: 1px solid #cbd4e2; border-radius: 7px; padding: 0 10px; outline: none; }
+.quick-preset-name-input:focus { border-color: #3972f4; box-shadow: 0 0 0 3px rgb(57 114 244 / 16%); }
 .plain-input { width: 100%; border: 1px solid #cdd4de; border-radius: 6px; padding: 8px 10px; background: white; font-size: 13px; }
 .background-upload { display: grid; gap: 8px; margin-block: 12px; }
 .text-background-preview { padding: 10px; border-radius: 8px; background: repeating-conic-gradient(#e1e5ec 0% 25%, #fff 0% 50%) 0 0 / 16px 16px; }

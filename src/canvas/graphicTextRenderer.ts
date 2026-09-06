@@ -70,6 +70,7 @@ const createTextLayer = (
   });
   // A range outline can split strokeText runs. Use the same glyph runs in fill and all outlines.
   text.forceCharacterRendering = model.partialStyles.some((range) => range.strokes && Object.keys(range.strokes).length > 0)
+    || model.partialStyles.some((range) => range.glyphOffsetY !== undefined)
     || Object.values(model.characterScale).some((scale) => Math.abs(scale - 1) > 0.0001);
   applyTextRanges(text, model);
   return text;
@@ -77,6 +78,7 @@ const createTextLayer = (
 
 export const createFabricGraphicText = (model: GraphicTextObject): RenderedGraphicText => {
   const children: FabricObject[] = [];
+  const glyphOffsetPadding = Math.max(0, ...model.partialStyles.map((range) => Math.abs(range.glyphOffsetY ?? 0)));
   const shadow = model.shadow.enabled
     ? new Shadow({
         color: toRgba(model.shadow.color, model.shadow.opacity),
@@ -139,7 +141,8 @@ export const createFabricGraphicText = (model: GraphicTextObject): RenderedGraph
     selectable: false, evented: false, objectCaching: Boolean(shadow),
     shadow, subTargetCheck: false,
   });
-  textGroup.inkPadding = Math.max(model.typography.fontSize, ...model.partialStyles.map((range) => range.fontSize ?? model.typography.fontSize)) * 3;
+  textGroup.inkPadding = Math.max(model.typography.fontSize, ...model.partialStyles.map((range) => range.fontSize ?? model.typography.fontSize)) * 3
+    + glyphOffsetPadding * 2;
   children.push(textGroup);
 
   const group = new Group(children, {
@@ -169,7 +172,7 @@ export const createFabricGraphicText = (model: GraphicTextObject): RenderedGraph
     transparentCorners: false,
     borderColor: '#2F6FED',
     borderScaleFactor: 2,
-    padding: 3,
+    padding: 3 + glyphOffsetPadding,
   });
   group.setControlsVisibility({ ml: false, mr: false, mt: false, mb: false });
   group.setCoords();

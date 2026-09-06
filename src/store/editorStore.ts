@@ -7,6 +7,7 @@ import { HISTORY_LIMIT } from '@/src/constants/editor';
 import { cloneBackground, cloneFill, cloneFontCatalog, clonePartialStyle } from '@/src/services/documentData';
 import { createGraphicText, createInitialProject, createObjectId, DEFAULT_GRAPHIC_TEXT_PRESET } from '@/src/store/defaults';
 import { getStrokeLayers } from '@/src/services/strokes';
+import { cloneQuickPartialOperation, cloneQuickPartialPreset, MAX_QUICK_PARTIAL_PRESETS } from '@/src/services/quickPartialPresets';
 import { cloneTextDesignDefaults, textDesignDefaultsEqual, toTextDesignDefaults } from '@/src/services/textDefaults';
 import type {
   AppNotice,
@@ -16,6 +17,8 @@ import type {
   GraphicTextObject,
   GraphicTextTemplateV1,
   ProjectDocument,
+  QuickPartialPreset,
+  QuickPartialStyleOperation,
   TextDesignDefaults,
 } from '@/src/types/editor';
 
@@ -34,11 +37,16 @@ interface EditorState {
   zoomPercent: number;
   notice: AppNotice | null;
   lastUsedTextDefaults: TextDesignDefaults;
+  quickPartialPresets: QuickPartialPreset[];
   setFabricCanvas: (canvas: FabricCanvas | null) => void;
   setZoomPercent: (percent: number) => void;
   setNotice: (message: string, kind?: AppNotice['kind']) => void;
   clearNotice: () => void;
   hydrateLastUsedTextDefaults: (defaults: TextDesignDefaults) => void;
+  hydrateQuickPartialPresets: (presets: QuickPartialPreset[]) => void;
+  addQuickPartialPreset: (preset: QuickPartialPreset) => void;
+  updateQuickPartialPreset: (id: string, patch: { name?: string; operation?: QuickPartialStyleOperation }) => void;
+  deleteQuickPartialPreset: (id: string) => void;
   selectObject: (id: string | null) => void;
   beginTransaction: () => void;
   finishTransaction: () => void;
@@ -87,6 +95,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   zoomPercent: 100,
   notice: null,
   lastUsedTextDefaults: cloneTextDesignDefaults(DEFAULT_GRAPHIC_TEXT_PRESET),
+  quickPartialPresets: [],
 
   setFabricCanvas: (fabricCanvas) => set({ fabricCanvas }),
   setZoomPercent: (zoomPercent) => set({ zoomPercent }),
@@ -94,6 +103,23 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     set({ notice: { id: Date.now(), kind, message } }),
   clearNotice: () => set({ notice: null }),
   hydrateLastUsedTextDefaults: (lastUsedTextDefaults) => set({ lastUsedTextDefaults: cloneTextDesignDefaults(lastUsedTextDefaults) }),
+  hydrateQuickPartialPresets: (quickPartialPresets) => set({
+    quickPartialPresets: quickPartialPresets.slice(0, MAX_QUICK_PARTIAL_PRESETS).map(cloneQuickPartialPreset),
+  }),
+  addQuickPartialPreset: (preset) => set((state) => state.quickPartialPresets.length >= MAX_QUICK_PARTIAL_PRESETS
+    ? state
+    : { quickPartialPresets: [...state.quickPartialPresets, cloneQuickPartialPreset(preset)] }),
+  updateQuickPartialPreset: (id, patch) => set((state) => ({
+    quickPartialPresets: state.quickPartialPresets.map((preset) => preset.id === id ? {
+      ...preset,
+      ...(patch.name !== undefined ? { name: patch.name } : {}),
+      ...(patch.operation ? { operation: cloneQuickPartialOperation(patch.operation) } : {}),
+      updatedAt: new Date().toISOString(),
+    } : preset),
+  })),
+  deleteQuickPartialPreset: (id) => set((state) => ({
+    quickPartialPresets: state.quickPartialPresets.filter((preset) => preset.id !== id),
+  })),
   selectObject: (selectedId) => set({ selectedId }),
 
   beginTransaction: () =>
