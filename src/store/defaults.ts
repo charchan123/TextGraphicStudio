@@ -1,5 +1,6 @@
 import type { ColorPalette, FontReference, GraphicTextObject, ProjectDocument, TextDesignDefaults } from '@/src/types/editor';
 import { clonePartialStrokes, getStrokeLayers } from '@/src/services/strokes';
+import { normalizeLineGapOffsets } from '@/src/services/lineGapOffsets';
 
 export const DEFAULT_COLOR_PALETTE: ColorPalette = [
   '#000000',
@@ -100,6 +101,7 @@ export const createGraphicText = (
     transform: { ...preset.transform },
     typography: { ...preset.typography },
     characterScale: { ...preset.characterScale },
+    lineGapOffsets: normalizeLineGapOffsets(text.trim() || '新しいテキスト'),
     fill:
       preset.fill.type === 'solid'
         ? { ...preset.fill }

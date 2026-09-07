@@ -20,6 +20,9 @@ interface EditorToolbarProps {
   busy: boolean;
   onRequestNew: () => void;
   onBackgroundFile: (file: File) => void;
+  onPreview: () => void;
+  onProjectExport: () => void;
+  onProjectFile: (file: File) => void;
   onExportProject: () => void;
   onExportSelected: () => void;
   onExportAll: () => void;
@@ -31,6 +34,9 @@ export function EditorToolbar({
   busy,
   onRequestNew,
   onBackgroundFile,
+  onPreview,
+  onProjectExport,
+  onProjectFile,
   onExportProject,
   onExportSelected,
   onExportAll,
@@ -38,6 +44,7 @@ export function EditorToolbar({
   onLoadTemplate,
 }: EditorToolbarProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const projectInputRef = useRef<HTMLInputElement | null>(null);
   const project = useEditorStore((state) => state.project);
   const selectedId = useEditorStore((state) => state.selectedId);
   const pastLength = useEditorStore((state) => state.past.length);
@@ -106,6 +113,21 @@ export function EditorToolbar({
 
       <div className="toolbar-export">
         <CanvasSizeControl />
+        <EditorActionButton action="outputPreview" iconOnly variant="outline" size="icon-lg" disabled={busy} onClick={onPreview} />
+        <EditorActionButton action="projectExport" iconOnly variant="outline" size="icon-lg" disabled={busy} onClick={onProjectExport} />
+        <EditorActionButton action="projectImport" iconOnly variant="outline" size="icon-lg" disabled={busy} onClick={() => projectInputRef.current?.click()} />
+        <input
+          ref={projectInputRef}
+          className="sr-only"
+          type="file"
+          accept=".tgsproj,application/json,application/vnd.text-graphic-studio.project+json"
+          aria-label="Text Graphic Studioプロジェクトファイル"
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0];
+            if (file) onProjectFile(file);
+            event.currentTarget.value = '';
+          }}
+        />
         <EditorActionButton action="templateLoad" iconOnly variant="ghost" size="icon-lg" disabled={!hasSelection} onClick={onLoadTemplate} />
         <EditorActionButton action="templateSave" iconOnly variant="outline" size="icon-lg" disabled={!hasSelection} onClick={() => onSaveTemplate(false)} />
         <EditorActionButton action="exportSelected" iconOnly variant="outline" size="icon-lg" disabled={busy || !hasSelection} onClick={onExportSelected} />

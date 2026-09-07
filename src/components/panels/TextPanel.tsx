@@ -10,7 +10,9 @@ import { SegmentedControl } from '@/src/components/controls/SegmentedControl';
 import { SliderField } from '@/src/components/controls/SliderField';
 import { SelectionEmpty } from '@/src/components/panels/SelectionEmpty';
 import { PartialStyleEditor } from '@/src/components/panels/PartialStyleEditor';
+import { LineGapEditor } from '@/src/components/panels/LineGapEditor';
 import { adjustRangesForTextEdit } from '@/src/services/partialStyles';
+import { normalizeLineGapOffsets } from '@/src/services/lineGapOffsets';
 import { useObjectEditor } from '@/src/hooks/useObjectEditor';
 import { useEditorStore } from '@/src/store/editorStore';
 import type { CharacterScaleStyle, FontStyleMode, TextAlignment } from '@/src/types/editor';
@@ -90,12 +92,18 @@ export function TextPanel() {
               onFocus={editor.begin}
               onChange={(event) => {
                 const text = event.currentTarget.value.replace(/\r\n?/g, '\n');
-                editor.preview((object) => ({ ...object, text, partialStyles: adjustRangesForTextEdit(object.text, text, object.partialStyles) }));
+                editor.preview((object) => ({
+                  ...object,
+                  text,
+                  partialStyles: adjustRangesForTextEdit(object.text, text, object.partialStyles),
+                  lineGapOffsets: normalizeLineGapOffsets(text, object.lineGapOffsets),
+                }));
               }}
               onSelect={(event) => setRange({ id: selected.id, text: selected.text, start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd })}
               onBlur={editor.finish}
             />
             <PartialStyleEditor key={`${selected.id}:${range.start}:${range.end}:${range.text === selected.text}`} selected={selected} start={range.id === selected.id && range.text === selected.text ? range.start : 0} end={range.id === selected.id && range.text === selected.text ? range.end : 0} />
+            <LineGapEditor selected={selected} start={range.id === selected.id && range.text === selected.text ? range.start : 0} end={range.id === selected.id && range.text === selected.text ? range.end : 0} />
           </section>
 
           <section className="panel-section">

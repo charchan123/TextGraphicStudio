@@ -188,6 +188,8 @@ export interface GraphicTextObject {
   };
   typography: TypographyStyle;
   characterScale: CharacterScaleStyle;
+  /** Extra vertical spacing after each line. Index 0 is the 1st→2nd boundary. */
+  lineGapOffsets: number[];
   fill: FillStyle;
   stroke: StrokeStyle;
   outerStroke: StrokeStyle;
@@ -245,6 +247,7 @@ export interface GraphicTextTemplateV1 {
   background: RoughBandStyle;
   transform: GraphicTextObject['transform'];
   characterScale: CharacterScaleStyle;
+  lineGapOffsets?: number[];
   partialStyles: PartialTextStyle[];
   palette?: ColorPalette;
   /** Metadata only. Local font binaries are never embedded. */
@@ -255,7 +258,7 @@ export interface GraphicTextTemplateV1 {
 /** Styling copied into newly-created text. Content, position and range styles are excluded by the factory. */
 export type TextDesignDefaults = Omit<
   GraphicTextObject,
-  'id' | 'name' | 'text' | 'position' | 'zIndex'
+  'id' | 'name' | 'text' | 'position' | 'zIndex' | 'lineGapOffsets'
 >;
 
 export type NoticeKind = 'success' | 'warning' | 'error' | 'info';

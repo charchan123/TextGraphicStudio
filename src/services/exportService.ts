@@ -101,7 +101,7 @@ const renderGraphicDataUrl = async (object: GraphicTextObject): Promise<string> 
   return trimTransparentPixels(raw);
 };
 
-const renderProjectDataUrl = async (project: ProjectDocument): Promise<string> => {
+export const renderProjectPngDataUrl = async (project: ProjectDocument): Promise<string> => {
   const visibleObjects = project.objects.filter((object) => object.visible);
   await waitForGraphicFonts(visibleObjects);
   const surface = new StaticCanvas(document.createElement('canvas'), {
@@ -144,8 +144,14 @@ const renderProjectDataUrl = async (project: ProjectDocument): Promise<string> =
 };
 
 export const exportProjectPng = async (project: ProjectDocument): Promise<void> => {
-  const dataUrl = await renderProjectDataUrl(project);
+  const dataUrl = await renderProjectPngDataUrl(project);
   downloadDataUrl(dataUrl, `text-graphic-${project.canvas.width}x${project.canvas.height}.png`);
+};
+
+/** Uses the exact canvas-PNG renderer without triggering a browser download. */
+export const renderProjectPngBlob = async (project: ProjectDocument): Promise<Blob> => {
+  const response = await fetch(await renderProjectPngDataUrl(project));
+  return response.blob();
 };
 
 export const exportGraphicPng = async (object: GraphicTextObject): Promise<void> => {

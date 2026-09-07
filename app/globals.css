@@ -91,6 +91,21 @@ button, input, textarea, select { font: inherit; }
 .inspector-tab { gap: 5px !important; }
 .inspector-tab[data-active] { box-shadow: 0 1px 4px rgb(22 34 55 / 10%), inset 0 -3px #3469d4 !important; }
 .partial-style-editor { margin-top: 14px; padding: 12px; border: 1px solid #d9e0ec; border-radius: 8px; background: #f7f9fc; }
+.line-gap-editor { margin-top: 12px; padding: 12px; border: 1px solid #cfd9e8; border-radius: 8px; background: #fff; }
+.line-gap-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.line-gap-heading h3 { font-size: 13px; font-weight: 750; }
+.line-gap-heading p, .line-gap-target { color: #69758a; font-size: 11px; line-height: 1.45; }
+.line-gap-target { margin: 9px 0; padding: 7px 8px; border-radius: 6px; background: #f3f6fb; color: #284b81; }
+
+.output-preview-dialog { width: min(1180px, calc(100vw - 32px)) !important; height: min(900px, calc(100vh - 32px)); max-width: 1180px !important; grid-template-rows: auto auto minmax(0, 1fr) auto; }
+.output-preview-actions, .output-preview-footer { display: flex; align-items: center; gap: 8px; }
+.output-preview-actions span { margin-left: auto; color: #68758a; font-size: 12px; }
+.output-preview-footer { justify-content: flex-end; }
+.output-preview-viewport { min-height: 0; overflow: auto; border: 1px solid #ccd4e1; border-radius: 8px; background: #252c38; }
+.output-preview-viewport img { display: block; background: #fff; }
+.output-preview-viewport.preview-fit { position: relative; overflow: hidden; }
+.output-preview-viewport.preview-fit img { position: absolute; inset: 12px; width: auto; height: auto; max-width: calc(100% - 24px); max-height: calc(100% - 24px); margin: auto; object-fit: contain; }
+.output-preview-viewport.preview-actual img { width: auto; max-width: none; height: auto; }
 .partial-style-editor summary { cursor: pointer; color: #284b81; font-size: 13px; font-weight: 700; }
 .range-selection { padding: 9px; margin-block: 10px; border-left: 3px solid #3972f4; background: #eaf0fb; color: #30476c; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .inline-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-block: 10px; }

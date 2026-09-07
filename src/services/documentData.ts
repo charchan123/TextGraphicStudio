@@ -10,6 +10,7 @@ import type {
   ProjectDocument,
   RoughBandStyle,
 } from '@/src/types/editor';
+import { normalizeLineGapOffsets } from '@/src/services/lineGapOffsets';
 
 export const DEFAULT_FOLLOW_SETTINGS = {
   capRatio: 0.22,
@@ -45,6 +46,7 @@ export const cloneGraphicObject = (object: GraphicTextObject): GraphicTextObject
   transform: { ...object.transform },
   typography: { ...object.typography },
   characterScale: { ...object.characterScale },
+  lineGapOffsets: [...(object.lineGapOffsets ?? [])],
   fill: cloneFill(object.fill),
   stroke: { ...getStrokeLayers(object)[0] },
   outerStroke: { ...getStrokeLayers(object)[1] },
@@ -78,6 +80,7 @@ const normalizeObject = (object: GraphicTextObject): GraphicTextObject => ({
     ...object.characterScale,
     symbol: object.characterScale.symbol ?? 1,
   },
+  lineGapOffsets: normalizeLineGapOffsets(object.text, object.lineGapOffsets),
 });
 
 export const normalizeProjectDocument = (project: ProjectDocument): ProjectDocument => {
@@ -112,6 +115,7 @@ export const normalizeTemplate = (template: GraphicTextTemplateV1): GraphicTextT
   background: normalizeTextBackground(template.background),
   transform: { ...template.transform },
   characterScale: { ...template.characterScale, symbol: template.characterScale.symbol ?? 1 },
+  lineGapOffsets: template.lineGapOffsets ? [...template.lineGapOffsets] : [],
   partialStyles: template.partialStyles.map(clonePartialStyle),
   palette: template.palette ? [...template.palette] : [...DEFAULT_COLOR_PALETTE],
   fontCatalog: cloneFontCatalog(template.fontCatalog ?? []),

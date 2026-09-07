@@ -31,6 +31,7 @@ export const createTemplate = (
   background: cloneBackground(object.background),
   transform: { ...object.transform },
   characterScale: { ...object.characterScale },
+  lineGapOffsets: [...object.lineGapOffsets],
   partialStyles: object.partialStyles.map(clonePartialStyle),
   palette: palette ? [...palette] : undefined,
   fontCatalog: cloneFontCatalog(fontCatalog),
@@ -113,6 +114,7 @@ const isTemplate = (value: unknown): value is GraphicTextTemplateV1 => {
     isFiniteNumber(characterScale.latin) &&
     isFiniteNumber(characterScale.number) &&
     (characterScale.symbol === undefined || isFiniteNumber(characterScale.symbol)) &&
+    (value.lineGapOffsets === undefined || (Array.isArray(value.lineGapOffsets) && value.lineGapOffsets.every((offset) => bounded(offset, -100, 100)))) &&
     Array.isArray(value.partialStyles) && value.partialStyles.every(isPartialTextStyle) &&
     (value.palette === undefined || isColorPalette(value.palette)) &&
     (value.fontCatalog === undefined || (Array.isArray(value.fontCatalog) && value.fontCatalog.every(isFontReference))) &&

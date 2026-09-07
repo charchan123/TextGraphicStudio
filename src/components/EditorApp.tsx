@@ -17,9 +17,10 @@ import {
 import { FabricCanvas } from '@/src/canvas/FabricCanvas';
 import { EditorToolbar } from '@/src/components/EditorToolbar';
 import { InspectorPanel } from '@/src/components/InspectorPanel';
+import { OutputPreviewDialog } from '@/src/components/OutputPreviewDialog';
 import { useKeyboardShortcuts } from '@/src/hooks/useKeyboardShortcuts';
 import { useWebMcp } from '@/src/hooks/useWebMcp';
-import { exportAllGraphicsPng, exportGraphicPng, exportProjectPng } from '@/src/services/exportService';
+import { exportAllGraphicsPng, exportGraphicPng, exportProjectPng, renderProjectPngBlob } from '@/src/services/exportService';
 import { loadBackgroundFile } from '@/src/services/imageService';
 import { getFontRestoreWarning } from '@/src/services/fontService';
 import {
@@ -33,6 +34,7 @@ import {
 } from '@/src/services/persistence';
 import { loadPalettePreference, savePalettePreference } from '@/src/services/palettePreference';
 import { createTemplate, downloadTemplate, readTemplateFile } from '@/src/services/templateService';
+import { downloadProjectFile, readProjectFile } from '@/src/services/projectFileService';
 import { createInitialProject } from '@/src/store/defaults';
 import { useEditorStore } from '@/src/store/editorStore';
 import type { ProjectDocument } from '@/src/types/editor';
@@ -55,6 +57,8 @@ export function EditorApp() {
   const [persistenceReady, setPersistenceReady] = useState(false);
   const [restoreCandidate, setRestoreCandidate] = useState<ProjectDocument | null>(null);
   const [newDialogOpen, setNewDialogOpen] = useState(false);
+  const [pendingProjectImport, setPendingProjectImport] = useState<ProjectDocument | null>(null);
+  const [outputPreview, setOutputPreview] = useState<{ url: string; width: number; height: number } | null>(null);
 
   const project = useEditorStore((state) => state.project);
   const selectedId = useEditorStore((state) => state.selectedId);
@@ -189,6 +193,10 @@ export function EditorApp() {
     return () => window.clearTimeout(timer);
   }, [clearNotice, notice]);
 
+  useEffect(() => () => {
+    if (outputPreview?.url) URL.revokeObjectURL(outputPreview.url);
+  }, [outputPreview?.url]);
+
   const runTask = async (task: () => Promise<void>, successMessage: string) => {
     setBusy(true);
     try {
@@ -210,6 +218,36 @@ export function EditorApp() {
 
   const handleExportProject = () => {
     void runTask(() => exportProjectPng(useEditorStore.getState().project), 'キャンバス全体をPNG保存しました。');
+  };
+
+  const handleOutputPreview = () => {
+    setOutputPreview(null);
+    void runTask(async () => {
+      const current = useEditorStore.getState().project;
+      const blob = await renderProjectPngBlob(current);
+      setOutputPreview({ url: URL.createObjectURL(blob), width: current.canvas.width, height: current.canvas.height });
+    }, '最新の出力プレビューを生成しました。');
+  };
+
+  const handleProjectExport = () => {
+    downloadProjectFile(useEditorStore.getState().project);
+    setNotice('プロジェクトを1ファイルへ書き出しました。', 'success');
+  };
+
+  const handleProjectFile = (file: File) => {
+    setBusy(true);
+    void readProjectFile(file)
+      .then(setPendingProjectImport)
+      .catch((error) => setNotice(error instanceof Error ? error.message : 'プロジェクトを読み込めませんでした。', 'error'))
+      .finally(() => setBusy(false));
+  };
+
+  const confirmProjectImport = () => {
+    if (!pendingProjectImport) return;
+    replaceProject(pendingProjectImport);
+    const warning = getFontRestoreWarning(pendingProjectImport);
+    setPendingProjectImport(null);
+    setNotice(warning ?? 'プロジェクトを読み込みました。', warning ? 'warning' : 'success');
   };
 
   const handleExportSelected = () => {
@@ -293,11 +331,15 @@ export function EditorApp() {
       data-selected-background-offset-y={selected?.background.offsetY ?? 0}
       data-selected-character-scale={selected ? JSON.stringify(selected.characterScale) : ''}
       data-quick-partial-preset-count={quickPartialPresetCount}
+      data-selected-line-gap-offsets={selected ? JSON.stringify(selected.lineGapOffsets ?? []) : ''}
     >
       <EditorToolbar
         busy={busy}
         onRequestNew={() => setNewDialogOpen(true)}
         onBackgroundFile={handleBackgroundFile}
+        onPreview={handleOutputPreview}
+        onProjectExport={handleProjectExport}
+        onProjectFile={handleProjectFile}
         onExportProject={handleExportProject}
         onExportSelected={handleExportSelected}
         onExportAll={handleExportAll}
@@ -359,6 +401,22 @@ export function EditorApp() {
       )}
 
       {busy && <output className="busy-indicator">処理中…</output>}
+
+      <OutputPreviewDialog key={outputPreview?.url ?? 'closed'} preview={outputPreview} onClose={() => setOutputPreview(null)} />
+
+      <AlertDialog open={Boolean(pendingProjectImport)} onOpenChange={(open) => { if (!open) setPendingProjectImport(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogMedia><AlertTriangle aria-hidden="true" /></AlertDialogMedia>
+            <AlertDialogTitle>プロジェクトを読み込みますか</AlertDialogTitle>
+            <AlertDialogDescription>現在の作業内容を置き換えます。個人用のクイック部分プリセットと最後に使用した全体設定は変更されません。</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>キャンセル</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmProjectImport}>読み込む</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={Boolean(restoreCandidate)}>
         <AlertDialogContent>

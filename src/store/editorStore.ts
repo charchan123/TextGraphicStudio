@@ -7,6 +7,7 @@ import { HISTORY_LIMIT } from '@/src/constants/editor';
 import { cloneBackground, cloneFill, cloneFontCatalog, clonePartialStyle } from '@/src/services/documentData';
 import { createGraphicText, createInitialProject, createObjectId, DEFAULT_GRAPHIC_TEXT_PRESET } from '@/src/store/defaults';
 import { getStrokeLayers } from '@/src/services/strokes';
+import { normalizeLineGapOffsets } from '@/src/services/lineGapOffsets';
 import { cloneQuickPartialOperation, cloneQuickPartialPreset, MAX_QUICK_PARTIAL_PRESETS } from '@/src/services/quickPartialPresets';
 import { cloneTextDesignDefaults, textDesignDefaultsEqual, toTextDesignDefaults } from '@/src/services/textDefaults';
 import type {
@@ -251,6 +252,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         transform: { ...source.transform },
         typography: { ...source.typography },
         characterScale: { ...source.characterScale },
+        lineGapOffsets: [...source.lineGapOffsets],
         fill: cloneFill(source.fill),
         stroke: { ...source.stroke },
         outerStroke: { ...source.outerStroke },
@@ -389,6 +391,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       background: cloneBackground(template.background),
       transform: { ...template.transform },
       characterScale: { ...template.characterScale },
+      lineGapOffsets: normalizeLineGapOffsets(existing.text, template.lineGapOffsets),
       partialStyles: template.partialStyles.map(clonePartialStyle),
       position: template.includePosition && template.position ? { ...template.position } : existing.position,
     };

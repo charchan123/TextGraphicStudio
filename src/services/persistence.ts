@@ -39,6 +39,7 @@ export const isProjectDocument = (value: unknown): value is ProjectDocument => {
       && isFiniteNumber(object.characterScale.latin)
       && isFiniteNumber(object.characterScale.number)
       && (object.characterScale.symbol === undefined || isFiniteNumber(object.characterScale.symbol))
+      && (object.lineGapOffsets === undefined || (Array.isArray(object.lineGapOffsets) && object.lineGapOffsets.every((offset) => bounded(offset, -100, 100))))
       && (object.strokes === undefined || isStrokeLayers(object.strokes))
       && isSafeFontText(object.typography.fontFamily)
       && (object.typography.fontRefId === undefined || isSafeFontText(object.typography.fontRefId))

@@ -62,10 +62,15 @@ export class StyledGraphicText extends FabricText {
   }
   private baseGlyphScaleX = 1;
   private baseGlyphScaleY = 1;
+  private lineGapOffsets: number[] = [];
 
   setGlyphScales(scaleX: number, scaleY: number): void {
     this.baseGlyphScaleX = scaleX;
     this.baseGlyphScaleY = scaleY;
+  }
+
+  setLineGapOffsets(offsets: readonly number[]): void {
+    this.lineGapOffsets = [...offsets];
   }
 
   private spacingAt(line: number, character: number): number {
@@ -120,7 +125,7 @@ export class StyledGraphicText extends FabricText {
   }
 
   override getHeightOfLine(lineIndex: number): number {
-    return this.rawLineHeight(lineIndex) * this.lineHeight;
+    return this.rawLineHeight(lineIndex) * this.lineHeight + (this.lineGapOffsets?.[lineIndex] ?? 0);
   }
 
   override calcTextHeight(): number {
@@ -196,7 +201,7 @@ export class StyledGraphicText extends FabricText {
     const layouts: Array<{ width: number; height: number; centerX: number; centerY: number }> = [];
     let top = -this.height / 2;
     this._textLines.forEach((line, lineIndex) => {
-      const baseHeight = this.getHeightOfLine(lineIndex) / this.lineHeight;
+      const baseHeight = this.rawLineHeight(lineIndex);
       const width = this.measureLine(lineIndex).width;
       if (line.length > 0 && width > 0) {
         let minTop = 0;
@@ -273,6 +278,7 @@ export const createTextFill = (fill: FillStyle, width: number, height: number, l
 
 export const applyTextRanges = (text: StyledGraphicText, model: GraphicTextObject): void => {
   text.setGlyphScales(model.typography.glyphScaleX ?? 1, model.typography.glyphScaleY ?? 1);
+  text.setLineGapOffsets(model.lineGapOffsets ?? []);
   const graphemes = util.string.graphemeSplit(model.text.replace(/\r\n?/g, '\n'));
   const fills = new Map<number, FillStyle>();
   let offset = 0;
