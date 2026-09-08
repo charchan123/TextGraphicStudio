@@ -69,6 +69,7 @@ export const DEFAULT_GRAPHIC_TEXT_PRESET: GraphicTextPreset = {
   },
   partialStyles: [],
   locked: false,
+  fullyLocked: false,
   visible: true,
 };
 

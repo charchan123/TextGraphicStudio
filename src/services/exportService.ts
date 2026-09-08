@@ -3,9 +3,10 @@ import { FabricImage, StaticCanvas } from 'fabric';
 import { createFabricGraphicText } from '@/src/canvas/graphicTextRenderer';
 import { prepareGraphicAssets } from '@/src/services/textBackgroundAssets';
 import { waitForGraphicFonts } from '@/src/services/fontService';
-import { downloadDataUrl, sanitizeFileName } from '@/src/services/download';
-import type { GraphicTextObject, ProjectDocument } from '@/src/types/editor';
+import { downloadBlob, downloadDataUrl, sanitizeFileName } from '@/src/services/download';
+import type { GraphicTextObject, ProjectDocument, StudioProject } from '@/src/types/editor';
 import { maxVisibleStrokeWidth } from '@/src/services/strokes';
+import { createZipBlob } from '@/src/services/zipService';
 
 const loadHtmlImage = (source: string): Promise<HTMLImageElement> =>
   new Promise((resolve, reject) => {
@@ -101,12 +102,13 @@ const renderGraphicDataUrl = async (object: GraphicTextObject): Promise<string> 
   return trimTransparentPixels(raw);
 };
 
-export const renderProjectPngDataUrl = async (project: ProjectDocument): Promise<string> => {
+const renderProjectDataUrl = async (project: ProjectDocument, outputWidth: number, outputHeight: number): Promise<string> => {
   const visibleObjects = project.objects.filter((object) => object.visible);
   await waitForGraphicFonts(visibleObjects);
+  const outputScale = Math.min(outputWidth / project.canvas.width, outputHeight / project.canvas.height);
   const surface = new StaticCanvas(document.createElement('canvas'), {
-    width: project.canvas.width,
-    height: project.canvas.height,
+    width: outputWidth,
+    height: outputHeight,
     backgroundColor: '#FFFFFF',
     enableRetinaScaling: false,
     renderOnAddRemove: false,
@@ -117,10 +119,10 @@ export const renderProjectPngDataUrl = async (project: ProjectDocument): Promise
       selectable: false,
       evented: false,
     });
-    const scale = project.canvas.height / Math.max(1, image.height);
+    const scale = project.canvas.height / Math.max(1, image.height) * outputScale;
     image.set({
-      left: project.canvas.width / 2,
-      top: project.canvas.height / 2,
+      left: outputWidth / 2,
+      top: outputHeight / 2,
       originX: 'center',
       originY: 'center',
       scaleX: scale,
@@ -133,7 +135,14 @@ export const renderProjectPngDataUrl = async (project: ProjectDocument): Promise
 
   await prepareGraphicAssets([...visibleObjects].sort((left, right) => left.zIndex - right.zIndex), (object) => {
       const { group } = createFabricGraphicText(object);
-      group.set({ selectable: false, evented: false });
+      group.set({
+        left: (group.left ?? 0) * outputScale,
+        top: (group.top ?? 0) * outputScale,
+        scaleX: (group.scaleX ?? 1) * outputScale,
+        scaleY: (group.scaleY ?? 1) * outputScale,
+        selectable: false,
+        evented: false,
+      });
       surface.add(group);
   });
 
@@ -141,6 +150,14 @@ export const renderProjectPngDataUrl = async (project: ProjectDocument): Promise
   const dataUrl = surface.toDataURL({ format: 'png', multiplier: 1, enableRetinaScaling: false });
   void surface.dispose();
   return dataUrl;
+};
+
+export const renderProjectPngDataUrl = async (project: ProjectDocument): Promise<string> =>
+  renderProjectDataUrl(project, project.canvas.width, project.canvas.height);
+
+export const renderProjectThumbnailDataUrl = async (project: ProjectDocument, maxWidth = 112, maxHeight = 112): Promise<string> => {
+  const scale = Math.min(maxWidth / project.canvas.width, maxHeight / project.canvas.height, 1);
+  return renderProjectDataUrl(project, Math.max(1, Math.round(project.canvas.width * scale)), Math.max(1, Math.round(project.canvas.height * scale)));
 };
 
 export const exportProjectPng = async (project: ProjectDocument): Promise<void> => {
@@ -166,4 +183,24 @@ export const exportAllGraphicsPng = async (objects: GraphicTextObject[]): Promis
     await new Promise<void>((resolve) => window.setTimeout(resolve, 180));
   }
   return targets.length;
+};
+
+const frameFileName = (index: number): string => `${String(index).padStart(2, '0')}.png`;
+
+export const exportAllFramesPng = async (project: StudioProject): Promise<number> => {
+  for (let index = 0; index < project.frames.length; index += 1) {
+    const blob = await renderProjectPngBlob(project.frames[index].document);
+    downloadBlob(blob, frameFileName(index));
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 180));
+  }
+  return project.frames.length;
+};
+
+export const exportAllFramesZip = async (project: StudioProject): Promise<void> => {
+  const entries = [];
+  for (let index = 0; index < project.frames.length; index += 1) {
+    const blob = await renderProjectPngBlob(project.frames[index].document);
+    entries.push({ name: frameFileName(index), data: new Uint8Array(await blob.arrayBuffer()) });
+  }
+  downloadBlob(createZipBlob(entries), `${sanitizeFileName(project.projectName)}.zip`);
 };

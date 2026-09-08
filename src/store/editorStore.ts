@@ -8,6 +8,14 @@ import { cloneBackground, cloneFill, cloneFontCatalog, clonePartialStyle } from 
 import { createGraphicText, createInitialProject, createObjectId, DEFAULT_GRAPHIC_TEXT_PRESET } from '@/src/store/defaults';
 import { getStrokeLayers } from '@/src/services/strokes';
 import { normalizeLineGapOffsets } from '@/src/services/lineGapOffsets';
+import {
+  activeFrameOf,
+  cloneProjectDocument,
+  createFrameId,
+  createStudioProject,
+  materializeActiveDocument,
+  normalizeStudioProject,
+} from '@/src/services/studioProject';
 import { cloneQuickPartialOperation, cloneQuickPartialPreset, MAX_QUICK_PARTIAL_PRESETS } from '@/src/services/quickPartialPresets';
 import { cloneTextDesignDefaults, textDesignDefaultsEqual, toTextDesignDefaults } from '@/src/services/textDefaults';
 import type {
@@ -18,6 +26,7 @@ import type {
   GraphicTextObject,
   GraphicTextTemplateV1,
   ProjectDocument,
+  StudioProject,
   QuickPartialPreset,
   QuickPartialStyleOperation,
   TextDesignDefaults,
@@ -29,6 +38,7 @@ type CanvasCenterMode = 'horizontal' | 'vertical' | 'both';
 type SocialGuide = NonNullable<ProjectDocument['canvas']['socialGuide']>;
 
 interface EditorState {
+  studioProject: StudioProject;
   project: ProjectDocument;
   selectedId: string | null;
   past: ProjectDocument[];
@@ -59,6 +69,7 @@ interface EditorState {
   deleteObject: (id?: string) => void;
   toggleObjectVisibility: (id: string) => void;
   toggleObjectLock: (id: string) => void;
+  toggleObjectFullLock: (id: string) => void;
   moveLayer: (id: string, direction: LayerDirection) => void;
   setBackgroundImage: (image: BackgroundImageData | null) => void;
   setCanvasSize: (width: number, height: number, preset: CanvasPresetId) => void;
@@ -68,6 +79,16 @@ interface EditorState {
   addFontReference: (font: FontReference) => void;
   applyTemplate: (template: GraphicTextTemplateV1) => void;
   replaceProject: (project: ProjectDocument) => void;
+  replaceStudioProject: (project: StudioProject) => void;
+  getStudioProjectSnapshot: () => StudioProject;
+  setProjectName: (name: string) => void;
+  renameFrame: (frameId: string, name: string) => void;
+  addFrame: () => void;
+  duplicateFrame: (frameId?: string) => void;
+  deleteFrame: (frameId: string) => void;
+  reorderFrame: (fromIndex: number, toIndex: number) => void;
+  selectFrame: (frameId: string) => void;
+  setFrameCompletedLocked: (frameId: string, locked: boolean) => void;
   createNewProject: () => void;
   undo: () => void;
   redo: () => void;
@@ -85,8 +106,20 @@ const pushHistory = (history: ProjectDocument[], project: ProjectDocument): Proj
   [...history, project].slice(-HISTORY_LIMIT);
 
 const initialProject = createInitialProject();
+const initialStudioProject = createStudioProject(initialProject.palette, initialProject.fontCatalog);
+initialStudioProject.frames[0] = { ...initialStudioProject.frames[0], document: initialProject };
+
+const activeFrameLocked = (state: Pick<EditorState, 'studioProject'>): boolean =>
+  Boolean(activeFrameOf(state.studioProject)?.completedLocked);
+
+const editBlocked = (state: EditorState, message = '完成ロック中のコマは編集できません。'): EditorState => ({
+  ...state,
+  transactionBase: null,
+  notice: { id: Date.now(), kind: 'warning', message },
+});
 
 export const useEditorStore = create<EditorState>()((set, get) => ({
+  studioProject: initialStudioProject,
   project: initialProject,
   selectedId: initialProject.objects[0]?.id ?? null,
   past: [],
@@ -140,8 +173,10 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
   updateObject: (id, updater, recordHistory = true) =>
     set((state) => {
+      if (activeFrameLocked(state)) return editBlocked(state);
       const existing = state.project.objects.find((object) => object.id === id);
       if (!existing) return state;
+      if (existing.fullyLocked) return editBlocked(state, '完全ロック中のオブジェクトは編集できません。');
       const updated = updater(existing);
       const previousDefaults = toTextDesignDefaults(existing);
       const nextDefaults = toTextDesignDefaults(updated);
@@ -183,6 +218,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
   addGraphic: (text) =>
     set((state) => {
+      if (activeFrameLocked(state)) return editBlocked(state);
       const newObject = createGraphicText(
         text,
         state.project.objects.length,
@@ -205,11 +241,12 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
   centerSelectedOnCanvas: (mode) =>
     set((state) => {
+      if (activeFrameLocked(state)) return editBlocked(state);
       if (!state.selectedId) return state;
       const selected = state.project.objects.find(
         (object) => object.id === state.selectedId,
       );
-      if (!selected || selected.locked) return state;
+      if (!selected || selected.locked || selected.fullyLocked) return state;
 
       const position = {
         x:
@@ -242,8 +279,10 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
   duplicateSelected: () =>
     set((state) => {
+      if (activeFrameLocked(state)) return editBlocked(state);
       const source = state.project.objects.find((object) => object.id === state.selectedId);
       if (!source) return state;
+      if (source.fullyLocked) return editBlocked(state, '完全ロック中のオブジェクトは複製できません。');
       const duplicate: GraphicTextObject = {
         ...source,
         id: createObjectId(),
@@ -261,6 +300,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         background: { ...cloneBackground(source.background), seed: source.background.seed + 97 },
         partialStyles: source.partialStyles.map(clonePartialStyle),
         locked: false,
+        fullyLocked: false,
         zIndex: state.project.objects.length,
       };
       return {
@@ -274,8 +314,12 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
   deleteObject: (requestedId) =>
     set((state) => {
+      if (activeFrameLocked(state)) return editBlocked(state);
       const id = requestedId ?? state.selectedId;
       if (!id || !state.project.objects.some((object) => object.id === id)) return state;
+      if (state.project.objects.find((object) => object.id === id)?.fullyLocked) {
+        return editBlocked(state, '完全ロック中のオブジェクトは削除できません。');
+      }
       const objects = normalizeZIndexes(state.project.objects.filter((object) => object.id !== id));
       return {
         project: stampProject({ ...state.project, objects }),
@@ -288,12 +332,29 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
   toggleObjectVisibility: (id) => get().updateObject(id, (object) => ({ ...object, visible: !object.visible })),
   toggleObjectLock: (id) => get().updateObject(id, (object) => ({ ...object, locked: !object.locked })),
+  toggleObjectFullLock: (id) => set((state) => {
+    if (activeFrameLocked(state)) return editBlocked(state);
+    const existing = state.project.objects.find((object) => object.id === id);
+    if (!existing) return state;
+    const project = stampProject({
+      ...state.project,
+      objects: state.project.objects.map((object) => object.id === id ? { ...object, fullyLocked: !object.fullyLocked } : object),
+    });
+    return {
+      project,
+      past: pushHistory(state.past, state.transactionBase ?? state.project),
+      future: [],
+      transactionBase: null,
+    };
+  }),
 
   moveLayer: (id, direction) =>
     set((state) => {
+      if (activeFrameLocked(state)) return editBlocked(state);
       const objects = [...state.project.objects];
       const from = objects.findIndex((object) => object.id === id);
       if (from < 0) return state;
+      if (objects[from].fullyLocked) return editBlocked(state, '完全ロック中のオブジェクトは重なり順を変更できません。');
       let to = from;
       if (direction === 'front') to = objects.length - 1;
       if (direction === 'forward') to = Math.min(objects.length - 1, from + 1);
@@ -311,7 +372,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     }),
 
   setBackgroundImage: (backgroundImage) =>
-    set((state) => ({
+    set((state) => activeFrameLocked(state) ? editBlocked(state) : ({
       project: stampProject({ ...state.project, backgroundImage }),
       past: pushHistory(state.past, state.transactionBase ?? state.project),
       future: [],
@@ -319,7 +380,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     })),
 
   setCanvasSize: (width, height, preset) =>
-    set((state) => ({
+    set((state) => activeFrameLocked(state) ? editBlocked(state) : ({
       project: stampProject({ ...state.project, canvas: { ...state.project.canvas, width, height, preset } }),
       past: pushHistory(state.past, state.transactionBase ?? state.project),
       future: [],
@@ -345,6 +406,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   })),
 
   setPaletteColor: (index, color) => set((state) => {
+    if (activeFrameLocked(state)) return editBlocked(state);
     if (index < 0 || index >= state.project.palette.length || state.project.palette[index] === color) return state;
     const palette = [...state.project.palette];
     palette[index] = color.toUpperCase();
@@ -357,6 +419,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   }),
 
   addFontReference: (font) => set((state) => {
+    if (activeFrameLocked(state)) return editBlocked(state);
     const fontCatalog = state.project.fontCatalog.some((item) => item.id === font.id)
       ? state.project.fontCatalog.map((item) => item.id === font.id ? { ...font } : item)
       : [...state.project.fontCatalog, { ...font }];
@@ -369,10 +432,12 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   }),
 
   applyTemplate: (template) => set((state) => {
+    if (activeFrameLocked(state)) return editBlocked(state);
     const id = state.selectedId;
     if (!id) return state;
     const existing = state.project.objects.find((object) => object.id === id);
     if (!existing) return state;
+    if (existing.fullyLocked) return editBlocked(state, '完全ロック中のオブジェクトへテンプレートは適用できません。');
     const incomingFonts = cloneFontCatalog(template.fontCatalog ?? []);
     const fontCatalog = [...state.project.fontCatalog];
     incomingFonts.forEach((font) => {
@@ -411,23 +476,162 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   }),
 
   replaceProject: (project) =>
-    set({
+    set((state) => ({
+      studioProject: materializeActiveDocument(state.studioProject, project),
       project,
       selectedId: project.objects.at(-1)?.id ?? null,
-      past: [],
-      future: [],
-      transactionBase: null,
-    }),
+      past: [], future: [], transactionBase: null,
+    })),
+
+  replaceStudioProject: (incoming) => set(() => {
+    const studioProject = normalizeStudioProject(incoming);
+    const project = cloneProjectDocument(activeFrameOf(studioProject).document);
+    return {
+      studioProject,
+      project,
+      selectedId: project.objects.at(-1)?.id ?? null,
+      past: [], future: [], transactionBase: null,
+    };
+  }),
+
+  getStudioProjectSnapshot: () => {
+    const state = get();
+    return materializeActiveDocument(state.studioProject, state.project);
+  },
+
+  setProjectName: (name) => set((state) => ({
+    studioProject: {
+      ...materializeActiveDocument(state.studioProject, state.project),
+      projectName: name,
+      updatedAt: new Date().toISOString(),
+    },
+  })),
+
+  renameFrame: (frameId, name) => set((state) => {
+    const studioProject = materializeActiveDocument(state.studioProject, state.project);
+    return {
+      studioProject: {
+        ...studioProject,
+        updatedAt: new Date().toISOString(),
+        frames: studioProject.frames.map((frame) => frame.frameId === frameId ? { ...frame, name, updatedAt: new Date().toISOString() } : frame),
+      },
+    };
+  }),
+
+  addFrame: () => set((state) => {
+    const studioProject = materializeActiveDocument(state.studioProject, state.project);
+    const document = createInitialProject(state.project.palette, state.project.fontCatalog);
+    const now = new Date().toISOString();
+    const frameId = createFrameId();
+    const frame = {
+      frameId,
+      name: `${studioProject.frames.length + 1}コマ目`,
+      document,
+      completedLocked: false,
+      createdAt: now,
+      updatedAt: now,
+    };
+    return {
+      studioProject: { ...studioProject, frames: [...studioProject.frames, frame], activeFrameId: frameId, updatedAt: now },
+      project: document,
+      selectedId: document.objects[0]?.id ?? null,
+      past: [], future: [], transactionBase: null,
+    };
+  }),
+
+  duplicateFrame: (requestedId) => set((state) => {
+    const studioProject = materializeActiveDocument(state.studioProject, state.project);
+    const frameId = requestedId ?? studioProject.activeFrameId;
+    const index = studioProject.frames.findIndex((frame) => frame.frameId === frameId);
+    if (index < 0) return state;
+    const source = studioProject.frames[index];
+    const now = new Date().toISOString();
+    const document = cloneProjectDocument(source.document);
+    document.objects = document.objects.map((object) => ({ ...object, id: createObjectId() }));
+    const duplicate = {
+      ...source,
+      frameId: createFrameId(),
+      name: `${source.name} のコピー`,
+      document,
+      completedLocked: false,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const frames = [...studioProject.frames];
+    frames.splice(index + 1, 0, duplicate);
+    return {
+      studioProject: { ...studioProject, frames, activeFrameId: duplicate.frameId, updatedAt: now },
+      project: document,
+      selectedId: document.objects.at(-1)?.id ?? null,
+      past: [], future: [], transactionBase: null,
+    };
+  }),
+
+  deleteFrame: (frameId) => set((state) => {
+    const studioProject = materializeActiveDocument(state.studioProject, state.project);
+    if (studioProject.frames.length <= 1) return editBlocked(state, '最後のコマは削除できません。');
+    const index = studioProject.frames.findIndex((frame) => frame.frameId === frameId);
+    if (index < 0) return state;
+    if (studioProject.frames[index].completedLocked) return editBlocked(state, '完成ロック中のコマは削除できません。');
+    const frames = studioProject.frames.filter((frame) => frame.frameId !== frameId);
+    const activeFrameId = frameId === studioProject.activeFrameId
+      ? frames[Math.min(index, frames.length - 1)].frameId
+      : studioProject.activeFrameId;
+    const nextDocument = activeFrameId === studioProject.activeFrameId
+      ? state.project
+      : cloneProjectDocument(frames.find((frame) => frame.frameId === activeFrameId)!.document);
+    return {
+      studioProject: { ...studioProject, frames, activeFrameId, updatedAt: new Date().toISOString() },
+      project: nextDocument,
+      selectedId: nextDocument.objects.at(-1)?.id ?? null,
+      past: [], future: [], transactionBase: null,
+    };
+  }),
+
+  reorderFrame: (fromIndex, toIndex) => set((state) => {
+    const studioProject = materializeActiveDocument(state.studioProject, state.project);
+    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= studioProject.frames.length || toIndex >= studioProject.frames.length) return state;
+    const frames = [...studioProject.frames];
+    const [moved] = frames.splice(fromIndex, 1);
+    frames.splice(toIndex, 0, moved);
+    return { studioProject: { ...studioProject, frames, updatedAt: new Date().toISOString() } };
+  }),
+
+  selectFrame: (frameId) => set((state) => {
+    if (frameId === state.studioProject.activeFrameId) return state;
+    const studioProject = materializeActiveDocument(state.studioProject, state.project);
+    const frame = studioProject.frames.find((item) => item.frameId === frameId);
+    if (!frame) return state;
+    const project = cloneProjectDocument(frame.document);
+    return {
+      studioProject: { ...studioProject, activeFrameId: frameId },
+      project,
+      selectedId: project.objects.at(-1)?.id ?? null,
+      past: [], future: [], transactionBase: null,
+    };
+  }),
+
+  setFrameCompletedLocked: (frameId, completedLocked) => set((state) => {
+    const studioProject = materializeActiveDocument(state.studioProject, state.project);
+    return {
+      studioProject: {
+        ...studioProject,
+        updatedAt: new Date().toISOString(),
+        frames: studioProject.frames.map((frame) => frame.frameId === frameId ? { ...frame, completedLocked, updatedAt: new Date().toISOString() } : frame),
+      },
+      past: [], future: [], transactionBase: null,
+    };
+  }),
 
   createNewProject: () =>
     set((state) => {
-      const project = createInitialProject(state.project.palette, state.project.fontCatalog);
+      const studioProject = createStudioProject(state.project.palette, state.project.fontCatalog);
+      const project = activeFrameOf(studioProject).document;
       return {
+        studioProject,
         project,
         selectedId: project.objects[0]?.id ?? null,
-        past: pushHistory(state.past, state.project),
-        future: [],
-        transactionBase: null,
+        past: [], future: [], transactionBase: null,
       };
     }),
 

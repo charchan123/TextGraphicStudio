@@ -19,6 +19,7 @@
     "test:browser:phase28": "node scripts/phase28-browser-check.mjs",
     "test:browser:phase281": "node scripts/phase281-browser-check.mjs",
     "test:browser:phase29": "node scripts/phase29-browser-check.mjs",
+    "test:browser:phase30": "node scripts/phase30-browser-check.mjs",
     "format": "oxfmt"
   },
   "dependencies": {

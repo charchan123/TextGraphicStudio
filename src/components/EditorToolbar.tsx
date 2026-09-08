@@ -26,6 +26,8 @@ interface EditorToolbarProps {
   onExportProject: () => void;
   onExportSelected: () => void;
   onExportAll: () => void;
+  onExportFrames: () => void;
+  onExportFramesZip: () => void;
   onSaveTemplate: (includePosition: boolean) => void;
   onLoadTemplate: () => void;
 }
@@ -40,6 +42,8 @@ export function EditorToolbar({
   onExportProject,
   onExportSelected,
   onExportAll,
+  onExportFrames,
+  onExportFramesZip,
   onSaveTemplate,
   onLoadTemplate,
 }: EditorToolbarProps) {
@@ -132,6 +136,8 @@ export function EditorToolbar({
         <EditorActionButton action="templateSave" iconOnly variant="outline" size="icon-lg" disabled={!hasSelection} onClick={() => onSaveTemplate(false)} />
         <EditorActionButton action="exportSelected" iconOnly variant="outline" size="icon-lg" disabled={busy || !hasSelection} onClick={onExportSelected} />
         <EditorActionButton action="exportAll" iconOnly variant="outline" size="icon-lg" disabled={busy || project.objects.length === 0} onClick={onExportAll} />
+        <EditorActionButton action="exportFrames" iconOnly variant="outline" size="icon-lg" disabled={busy} onClick={onExportFrames} />
+        <EditorActionButton action="exportFramesZip" iconOnly variant="outline" size="icon-lg" disabled={busy} onClick={onExportFramesZip} />
         <EditorActionButton action="exportProject" iconOnly size="icon-lg" disabled={busy} onClick={onExportProject} />
       </div>
     </header>

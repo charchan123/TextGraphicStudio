@@ -1,7 +1,7 @@
 'use client';
 
 import type { ComponentProps } from 'react';
-import { Eye, FileDown, FileJson, FolderDown, FolderInput, PackageOpen, ImageDown, Save } from 'lucide-react';
+import { Archive, Eye, FileDown, FileJson, FolderDown, FolderInput, Images, PackageOpen, ImageDown, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ToolbarTooltip } from '@/src/components/ToolbarTooltip';
 
@@ -14,6 +14,8 @@ export const EDITOR_ACTIONS = {
   exportSelected: { icon: FileDown, label: '選択中のテキストを透明PNG保存' },
   exportProject: { icon: ImageDown, label: 'キャンバス全体をPNG保存' },
   exportAll: { icon: FolderDown, label: 'すべてを個別に透明PNG保存' },
+  exportFrames: { icon: Images, label: '全コマをPNG一括保存' },
+  exportFramesZip: { icon: Archive, label: '全コマをZIP保存' },
 } as const;
 
 type Props = Omit<ComponentProps<typeof Button>, 'children' | 'aria-label'> & {

@@ -7,6 +7,7 @@ import {
   Eye,
   EyeOff,
   Lock,
+  ShieldCheck,
   SendToBack,
   Trash2,
   Unlock,
@@ -24,6 +25,8 @@ export function LayerPanel() {
   const finishTransaction = useEditorStore((state) => state.finishTransaction);
   const toggleVisibility = useEditorStore((state) => state.toggleObjectVisibility);
   const toggleLock = useEditorStore((state) => state.toggleObjectLock);
+  const toggleFullLock = useEditorStore((state) => state.toggleObjectFullLock);
+  const frameLocked = useEditorStore((state) => state.studioProject.frames.find((frame) => frame.frameId === state.studioProject.activeFrameId)?.completedLocked ?? false);
   const deleteObject = useEditorStore((state) => state.deleteObject);
   const moveLayer = useEditorStore((state) => state.moveLayer);
   const selected = project.objects.find((object) => object.id === selectedId) ?? null;
@@ -67,6 +70,7 @@ export function LayerPanel() {
                 <input
                   type="text"
                   value={object.name}
+                  disabled={frameLocked || object.fullyLocked}
                   aria-label="レイヤー名"
                   onMouseDown={(event) => {
                     event.stopPropagation();
@@ -85,12 +89,24 @@ export function LayerPanel() {
                 <Button
                   variant="ghost"
                   size="icon-sm"
-                  title={object.locked ? 'ロックを解除' : 'ロック'}
-                  aria-label={`${object.name}のロックを${object.locked ? '解除' : '有効化'}`}
+                  title={object.locked ? '位置ロックを解除' : '位置ロック'}
+                  aria-label={`${object.name}の位置ロックを${object.locked ? '解除' : '有効化'}`}
+                  disabled={frameLocked || object.fullyLocked}
                   onMouseDown={(event) => event.stopPropagation()}
                   onClick={() => toggleLock(object.id)}
                 >
                   {object.locked ? <Lock aria-hidden="true" /> : <Unlock aria-hidden="true" />}
+                </Button>
+                <Button
+                  variant={object.fullyLocked ? 'secondary' : 'ghost'}
+                  size="icon-sm"
+                  title={object.fullyLocked ? '完全ロックを解除' : '完全ロック'}
+                  aria-label={`${object.name}の完全ロックを${object.fullyLocked ? '解除' : '有効化'}`}
+                  disabled={frameLocked}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onClick={() => toggleFullLock(object.id)}
+                >
+                  <ShieldCheck aria-hidden="true" />
                 </Button>
                 <Button
                   variant="ghost"
@@ -98,6 +114,7 @@ export function LayerPanel() {
                   className="layer-delete"
                   title="削除"
                   aria-label={`${object.name}を削除`}
+                  disabled={frameLocked || object.fullyLocked}
                   onMouseDown={(event) => event.stopPropagation()}
                   onClick={() => deleteObject(object.id)}
                 >
@@ -112,16 +129,16 @@ export function LayerPanel() {
       <section className="panel-section">
         <h2>重なり順</h2>
         <div className="layer-order-grid">
-          <Button variant="outline" disabled={!selected} onClick={() => selected && moveLayer(selected.id, 'front')}>
+          <Button variant="outline" disabled={!selected || frameLocked || selected.fullyLocked} onClick={() => selected && moveLayer(selected.id, 'front')}>
             <BringToFront aria-hidden="true" />最前面へ
           </Button>
-          <Button variant="outline" disabled={!selected} onClick={() => selected && moveLayer(selected.id, 'forward')}>
+          <Button variant="outline" disabled={!selected || frameLocked || selected.fullyLocked} onClick={() => selected && moveLayer(selected.id, 'forward')}>
             <ArrowUp aria-hidden="true" />前面へ
           </Button>
-          <Button variant="outline" disabled={!selected} onClick={() => selected && moveLayer(selected.id, 'backward')}>
+          <Button variant="outline" disabled={!selected || frameLocked || selected.fullyLocked} onClick={() => selected && moveLayer(selected.id, 'backward')}>
             <ArrowDown aria-hidden="true" />背面へ
           </Button>
-          <Button variant="outline" disabled={!selected} onClick={() => selected && moveLayer(selected.id, 'back')}>
+          <Button variant="outline" disabled={!selected || frameLocked || selected.fullyLocked} onClick={() => selected && moveLayer(selected.id, 'back')}>
             <SendToBack aria-hidden="true" />最背面へ
           </Button>
         </div>

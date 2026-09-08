@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Popover } from '@base-ui/react/popover';
 import { MoreHorizontal, Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -70,8 +71,6 @@ export function QuickPartialPresets({
     setDialog({ mode: 'create', operation: cloneQuickPartialOperation(currentOperation) });
   };
 
-  const closeMenu = (target: HTMLElement) => target.closest('details')?.removeAttribute('open');
-
   return <section className="quick-partial-presets" aria-label="クイック部分プリセット">
     <div className="quick-preset-heading">
       <h3>クイック部分プリセット</h3>
@@ -93,27 +92,28 @@ export function QuickPartialPresets({
             setNotice(`「${preset.name}」を選択範囲へ適用しました。`, 'success');
           }}
         >{preset.name}</Button>
-        <details className="quick-preset-menu">
-          <summary aria-label={`${preset.name}の管理`} title={`${preset.name}の管理`}><MoreHorizontal aria-hidden="true" /></summary>
-          <div className="quick-preset-menu-popup" role="menu">
-            <button type="button" role="menuitem" onClick={(event) => {
-              closeMenu(event.currentTarget);
+        <Popover.Root>
+          <Popover.Trigger type="button" className="quick-preset-menu-trigger" aria-label={`${preset.name}の管理`} title={`${preset.name}の管理`}><MoreHorizontal aria-hidden="true" /></Popover.Trigger>
+          <Popover.Portal>
+            <Popover.Positioner className="quick-preset-menu-positioner" side="bottom" align="end" sideOffset={4} collisionPadding={10}>
+              <Popover.Popup className="quick-preset-menu-popup" role="menu">
+            <Popover.Close type="button" role="menuitem" onClick={() => {
               if (!validateCurrentOperation()) return;
               updatePreset(preset.id, { operation: currentOperation });
               setNotice(`「${preset.name}」を現在の設定で上書きしました。`, 'success');
-            }}>現在の設定で上書き</button>
-            <button type="button" role="menuitem" onClick={(event) => {
-              closeMenu(event.currentTarget);
+            }}>現在の設定で上書き</Popover.Close>
+            <Popover.Close type="button" role="menuitem" onClick={() => {
               setName(preset.name);
               setDialog({ mode: 'rename', presetId: preset.id });
-            }}>名前変更</button>
-            <button type="button" role="menuitem" className="destructive" onClick={(event) => {
-              closeMenu(event.currentTarget);
+            }}>名前変更</Popover.Close>
+            <Popover.Close type="button" role="menuitem" className="destructive" onClick={() => {
               deletePreset(preset.id);
               setNotice(`「${preset.name}」を削除しました。適用済みの文字は変更されません。`, 'info');
-            }}>削除</button>
-          </div>
-        </details>
+            }}>削除</Popover.Close>
+              </Popover.Popup>
+            </Popover.Positioner>
+          </Popover.Portal>
+        </Popover.Root>
       </div>)}
       {!presets.length && <p className="quick-preset-empty">よく使う部分スタイルを最大8個保存できます。</p>}
     </div>

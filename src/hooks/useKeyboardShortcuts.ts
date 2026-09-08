@@ -61,7 +61,7 @@ export function useKeyboardShortcuts() {
       }
       if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return;
       const selected = state.project.objects.find((object) => object.id === state.selectedId);
-      if (!selected || selected.locked) return;
+      if (!selected || selected.locked || selected.fullyLocked) return;
       event.preventDefault();
       const amount = event.shiftKey ? 10 : 1;
       const deltaX = event.key === 'ArrowLeft' ? -amount : event.key === 'ArrowRight' ? amount : 0;

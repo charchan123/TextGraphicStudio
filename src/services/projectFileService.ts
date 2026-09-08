@@ -1,18 +1,19 @@
-import { downloadTextFile } from '@/src/services/download';
+import { downloadTextFile, sanitizeFileName } from '@/src/services/download';
 import { normalizeProjectDocument } from '@/src/services/documentData';
-import { isProjectDocument } from '@/src/services/persistence';
+import { isProjectDocument, isStudioProject } from '@/src/services/persistence';
 import { prepareGraphicAssets } from '@/src/services/textBackgroundAssets';
-import type { ProjectDocument } from '@/src/types/editor';
+import { normalizeStudioProject, wrapLegacyDocument } from '@/src/services/studioProject';
+import type { ProjectDocument, StudioProject } from '@/src/types/editor';
 
 const PROJECT_KIND = 'text-graphic-studio-project-package';
-const PROJECT_VERSION = 1;
+const PROJECT_VERSION = 2;
 const MAX_PROJECT_BYTES = 128 * 1024 * 1024;
 
-interface PortableProjectFile {
+interface PortableProjectFileV2 {
   kind: typeof PROJECT_KIND;
   version: typeof PROJECT_VERSION;
   exportedAt: string;
-  document: ProjectDocument;
+  project: StudioProject;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
@@ -37,30 +38,22 @@ const validatePortableAssets = async (project: ProjectDocument): Promise<void> =
   await prepareGraphicAssets(project.objects);
 };
 
-export const createPortableProject = (document: ProjectDocument): PortableProjectFile => ({
+export const createPortableProject = (project: StudioProject): PortableProjectFileV2 => ({
   kind: PROJECT_KIND,
   version: PROJECT_VERSION,
   exportedAt: new Date().toISOString(),
-  document: normalizeProjectDocument(document),
+  project: normalizeStudioProject(project),
 });
 
-const timestamp = (): string => {
-  const parts = new Intl.DateTimeFormat('ja-JP', {
-    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
-  }).formatToParts(new Date());
-  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? '00';
-  return `${get('year')}${get('month')}${get('day')}-${get('hour')}${get('minute')}`;
-};
-
-export const downloadProjectFile = (project: ProjectDocument): void => {
+export const downloadProjectFile = (project: StudioProject): void => {
   downloadTextFile(
     JSON.stringify(createPortableProject(project)),
-    `text-graphic-studio-${timestamp()}.tgsproj`,
+    `${sanitizeFileName(project.projectName)}.tgsproj`,
     'application/vnd.text-graphic-studio.project+json;charset=utf-8',
   );
 };
 
-export const readProjectFile = async (file: File): Promise<ProjectDocument> => {
+export const readProjectFile = async (file: File): Promise<StudioProject> => {
   if (file.size <= 0 || file.size > MAX_PROJECT_BYTES) throw new Error('プロジェクトファイルは128MB以内にしてください。');
   let parsed: unknown;
   try {
@@ -68,10 +61,17 @@ export const readProjectFile = async (file: File): Promise<ProjectDocument> => {
   } catch {
     throw new Error('プロジェクトファイルの内容を読み取れませんでした。');
   }
-  if (!isRecord(parsed) || parsed.kind !== PROJECT_KIND || parsed.version !== PROJECT_VERSION || !isProjectDocument(parsed.document)) {
+  if (!isRecord(parsed) || parsed.kind !== PROJECT_KIND) {
     throw new Error('対応しているText Graphic Studioプロジェクト形式ではありません。');
   }
-  const project = normalizeProjectDocument(parsed.document);
-  await validatePortableAssets(project);
+  let project: StudioProject;
+  if (parsed.version === PROJECT_VERSION && isStudioProject(parsed.project)) {
+    project = normalizeStudioProject(parsed.project);
+  } else if (parsed.version === 1 && isProjectDocument(parsed.document)) {
+    project = wrapLegacyDocument(normalizeProjectDocument(parsed.document));
+  } else {
+    throw new Error('対応しているText Graphic Studioプロジェクト形式ではありません。');
+  }
+  for (const frame of project.frames) await validatePortableAssets(frame.document);
   return project;
 };

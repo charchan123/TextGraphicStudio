@@ -10,6 +10,7 @@ export const toTextDesignDefaults = (object: GraphicTextObject): TextDesignDefau
     transform: { ...design.transform, scaleX: 1, scaleY: 1 },
     partialStyles: [],
     locked: false,
+    fullyLocked: false,
     visible: true,
   };
 };

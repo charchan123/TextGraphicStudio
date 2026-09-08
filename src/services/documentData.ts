@@ -81,6 +81,8 @@ const normalizeObject = (object: GraphicTextObject): GraphicTextObject => ({
     symbol: object.characterScale.symbol ?? 1,
   },
   lineGapOffsets: normalizeLineGapOffsets(object.text, object.lineGapOffsets),
+  locked: Boolean(object.locked),
+  fullyLocked: Boolean(object.fullyLocked),
 });
 
 export const normalizeProjectDocument = (project: ProjectDocument): ProjectDocument => {

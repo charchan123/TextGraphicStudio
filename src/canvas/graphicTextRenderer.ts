@@ -145,6 +145,7 @@ export const createFabricGraphicText = (model: GraphicTextObject): RenderedGraph
     + glyphOffsetPadding * 2;
   children.push(textGroup);
 
+  const transformLocked = model.locked || model.fullyLocked;
   const group = new Group(children, {
     left: model.position.x,
     top: model.position.y,
@@ -156,12 +157,12 @@ export const createFabricGraphicText = (model: GraphicTextObject): RenderedGraph
     visible: model.visible,
     selectable: model.visible,
     evented: model.visible,
-    lockMovementX: model.locked,
-    lockMovementY: model.locked,
-    lockScalingX: model.locked,
-    lockScalingY: model.locked,
-    lockRotation: model.locked,
-    hasControls: !model.locked,
+    lockMovementX: transformLocked,
+    lockMovementY: transformLocked,
+    lockScalingX: transformLocked,
+    lockScalingY: transformLocked,
+    lockRotation: transformLocked,
+    hasControls: !transformLocked,
     centeredRotation: true,
     centeredScaling: true,
     subTargetCheck: false,

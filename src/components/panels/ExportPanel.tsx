@@ -13,6 +13,8 @@ interface ExportPanelProps {
   onExportProject: () => void;
   onExportSelected: () => void;
   onExportAll: () => void;
+  onExportFrames: () => void;
+  onExportFramesZip: () => void;
   onSaveTemplate: (includePosition: boolean) => void;
   onLoadTemplate: () => void;
 }
@@ -22,6 +24,8 @@ export function ExportPanel({
   onExportProject,
   onExportSelected,
   onExportAll,
+  onExportFrames,
+  onExportFramesZip,
   onSaveTemplate,
   onLoadTemplate,
 }: ExportPanelProps) {
@@ -46,6 +50,8 @@ export function ExportPanel({
           <EditorActionButton action="exportProject" size="lg" disabled={busy} onClick={onExportProject} />
           <EditorActionButton action="exportSelected" variant="outline" size="lg" disabled={busy || !hasSelection} onClick={onExportSelected} />
           <EditorActionButton action="exportAll" variant="outline" size="lg" disabled={busy || project.objects.length === 0} onClick={onExportAll} />
+          <EditorActionButton action="exportFrames" variant="outline" size="lg" disabled={busy} onClick={onExportFrames} />
+          <EditorActionButton action="exportFramesZip" variant="outline" size="lg" disabled={busy} onClick={onExportFramesZip} />
         </div>
         <p className="panel-note">透明PNGにはフチ・影・テキスト背景を含めます。キャンバス背景画像とガイドは含めません。</p>
       </section>

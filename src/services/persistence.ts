@@ -1,9 +1,10 @@
-import type { BackgroundPreset, ProjectDocument, QuickPartialPreset, QuickPartialStyleOperation, TextDesignDefaults } from '@/src/types/editor';
+import type { BackgroundPreset, ProjectDocument, QuickPartialPreset, QuickPartialStyleOperation, StudioProject, TextDesignDefaults } from '@/src/types/editor';
 import { normalizeProjectDocument, normalizeTextBackground } from '@/src/services/documentData';
 import { cloneQuickPartialPreset, hasQuickPartialOperation, MAX_QUICK_PARTIAL_PRESETS } from '@/src/services/quickPartialPresets';
 import { toTextDesignDefaults } from '@/src/services/textDefaults';
 import { isStrokeLayers } from '@/src/services/styleValidation';
 import { bounded, isColorPalette, isFillStyle, isFontReference, isPartialTextStyle, isSafeFontText, isTextBackground } from '@/src/services/styleValidation';
+import { normalizeStudioProject, wrapLegacyDocument } from '@/src/services/studioProject';
 
 const DATABASE_NAME = 'text-graphic-studio';
 const STORE_NAME = 'projects';
@@ -40,6 +41,7 @@ export const isProjectDocument = (value: unknown): value is ProjectDocument => {
       && isFiniteNumber(object.characterScale.number)
       && (object.characterScale.symbol === undefined || isFiniteNumber(object.characterScale.symbol))
       && (object.lineGapOffsets === undefined || (Array.isArray(object.lineGapOffsets) && object.lineGapOffsets.every((offset) => bounded(offset, -100, 100))))
+      && (object.fullyLocked === undefined || typeof object.fullyLocked === 'boolean')
       && (object.strokes === undefined || isStrokeLayers(object.strokes))
       && isSafeFontText(object.typography.fontFamily)
       && (object.typography.fontRefId === undefined || isSafeFontText(object.typography.fontRefId))
@@ -51,6 +53,23 @@ export const isProjectDocument = (value: unknown): value is ProjectDocument => {
       Array.isArray(object.partialStyles) && object.partialStyles.every(isPartialTextStyle),
     )
   );
+};
+
+export const isStudioProject = (value: unknown): value is StudioProject => {
+  if (!isRecord(value) || value.kind !== 'text-graphic-studio-multi-frame-project' || value.schemaVersion !== 1) return false;
+  if (typeof value.projectId !== 'string' || typeof value.projectName !== 'string' || typeof value.activeFrameId !== 'string') return false;
+  if (typeof value.createdAt !== 'string' || typeof value.updatedAt !== 'string' || !Array.isArray(value.frames) || value.frames.length < 1) return false;
+  const frameIds = new Set<string>();
+  const validFrames = value.frames.every((frame) => {
+    if (!isRecord(frame) || typeof frame.frameId !== 'string' || !frame.frameId || frameIds.has(frame.frameId)) return false;
+    frameIds.add(frame.frameId);
+    return typeof frame.name === 'string'
+      && typeof frame.completedLocked === 'boolean'
+      && typeof frame.createdAt === 'string'
+      && typeof frame.updatedAt === 'string'
+      && isProjectDocument(frame.document);
+  });
+  return validFrames && frameIds.has(value.activeFrameId);
 };
 
 const openDatabase = (): Promise<IDBDatabase> =>
@@ -83,13 +102,14 @@ const runRequest = <T>(mode: IDBTransactionMode, operation: (store: IDBObjectSto
       }),
   );
 
-export const saveAutosave = async (project: ProjectDocument): Promise<void> => {
+export const saveAutosave = async (project: StudioProject): Promise<void> => {
   await runRequest('readwrite', (store) => store.put(project, AUTOSAVE_KEY));
 };
 
-export const loadAutosave = async (): Promise<ProjectDocument | null> => {
+export const loadAutosave = async (): Promise<StudioProject | null> => {
   const value = await runRequest<unknown>('readonly', (store) => store.get(AUTOSAVE_KEY));
-  return isProjectDocument(value) ? normalizeProjectDocument(value) : null;
+  if (isStudioProject(value)) return normalizeStudioProject(value);
+  return isProjectDocument(value) ? wrapLegacyDocument(normalizeProjectDocument(value)) : null;
 };
 
 export const clearAutosave = async (): Promise<void> => {

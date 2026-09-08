@@ -199,6 +199,8 @@ export interface GraphicTextObject {
   background: RoughBandStyle;
   partialStyles: PartialTextStyle[];
   locked: boolean;
+  /** Prevents every edit path while still allowing selection and inspection. */
+  fullyLocked?: boolean;
   visible: boolean;
   zIndex: number;
 }
@@ -231,6 +233,27 @@ export interface ProjectDocument {
   /** Metadata only. Local font binaries are never persisted. */
   fontCatalog: FontReference[];
   objects: GraphicTextObject[];
+}
+
+export interface ProjectFrame {
+  frameId: string;
+  name: string;
+  document: ProjectDocument;
+  completedLocked: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Phase 3 container. ProjectDocument intentionally remains the one-frame canvas model. */
+export interface StudioProject {
+  kind: 'text-graphic-studio-multi-frame-project';
+  schemaVersion: 1;
+  projectId: string;
+  projectName: string;
+  frames: ProjectFrame[];
+  activeFrameId: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface GraphicTextTemplateV1 {

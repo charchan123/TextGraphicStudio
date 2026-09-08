@@ -18,9 +18,10 @@ import { FabricCanvas } from '@/src/canvas/FabricCanvas';
 import { EditorToolbar } from '@/src/components/EditorToolbar';
 import { InspectorPanel } from '@/src/components/InspectorPanel';
 import { OutputPreviewDialog } from '@/src/components/OutputPreviewDialog';
+import { Storyboard } from '@/src/components/Storyboard';
 import { useKeyboardShortcuts } from '@/src/hooks/useKeyboardShortcuts';
 import { useWebMcp } from '@/src/hooks/useWebMcp';
-import { exportAllGraphicsPng, exportGraphicPng, exportProjectPng, renderProjectPngBlob } from '@/src/services/exportService';
+import { exportAllFramesPng, exportAllFramesZip, exportAllGraphicsPng, exportGraphicPng, exportProjectPng, renderProjectPngBlob } from '@/src/services/exportService';
 import { loadBackgroundFile } from '@/src/services/imageService';
 import { getFontRestoreWarning } from '@/src/services/fontService';
 import {
@@ -35,9 +36,9 @@ import {
 import { loadPalettePreference, savePalettePreference } from '@/src/services/palettePreference';
 import { createTemplate, downloadTemplate, readTemplateFile } from '@/src/services/templateService';
 import { downloadProjectFile, readProjectFile } from '@/src/services/projectFileService';
-import { createInitialProject } from '@/src/store/defaults';
+import { createStudioProject } from '@/src/services/studioProject';
 import { useEditorStore } from '@/src/store/editorStore';
-import type { ProjectDocument } from '@/src/types/editor';
+import type { StudioProject } from '@/src/types/editor';
 
 const formatSavedAt = (isoDate: string): string => {
   const date = new Date(isoDate);
@@ -55,12 +56,13 @@ export function EditorApp() {
   const templateInputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [persistenceReady, setPersistenceReady] = useState(false);
-  const [restoreCandidate, setRestoreCandidate] = useState<ProjectDocument | null>(null);
+  const [restoreCandidate, setRestoreCandidate] = useState<StudioProject | null>(null);
   const [newDialogOpen, setNewDialogOpen] = useState(false);
-  const [pendingProjectImport, setPendingProjectImport] = useState<ProjectDocument | null>(null);
+  const [pendingProjectImport, setPendingProjectImport] = useState<StudioProject | null>(null);
   const [outputPreview, setOutputPreview] = useState<{ url: string; width: number; height: number } | null>(null);
 
   const project = useEditorStore((state) => state.project);
+  const studioProject = useEditorStore((state) => state.studioProject);
   const selectedId = useEditorStore((state) => state.selectedId);
   const zoomPercent = useEditorStore((state) => state.zoomPercent);
   const notice = useEditorStore((state) => state.notice);
@@ -68,6 +70,7 @@ export function EditorApp() {
   const setNotice = useEditorStore((state) => state.setNotice);
   const clearNotice = useEditorStore((state) => state.clearNotice);
   const replaceProject = useEditorStore((state) => state.replaceProject);
+  const replaceStudioProject = useEditorStore((state) => state.replaceStudioProject);
   const createNewProject = useEditorStore((state) => state.createNewProject);
   const setBackgroundImage = useEditorStore((state) => state.setBackgroundImage);
   const applyTemplate = useEditorStore((state) => state.applyTemplate);
@@ -114,10 +117,10 @@ export function EditorApp() {
     if (!persistenceReady) return;
     let timer: number | null = null;
     let saveErrorShown = false;
-    const scheduleSave = (nextProject: ProjectDocument) => {
+    const scheduleSave = () => {
       if (timer !== null) window.clearTimeout(timer);
       timer = window.setTimeout(() => {
-        void saveAutosave(nextProject).catch(() => {
+        void saveAutosave(useEditorStore.getState().getStudioProjectSnapshot()).catch(() => {
           if (!saveErrorShown) {
             saveErrorShown = true;
             useEditorStore.getState().setNotice('自動保存に失敗しました。ブラウザの空き容量を確認してください。', 'error');
@@ -125,12 +128,19 @@ export function EditorApp() {
         });
       }, 900);
     };
-    scheduleSave(useEditorStore.getState().project);
-    const unsubscribe = useEditorStore.subscribe((state) => scheduleSave(state.project));
+    let previousDocument = useEditorStore.getState().project;
+    let previousStudioProject = useEditorStore.getState().studioProject;
+    scheduleSave();
+    const unsubscribe = useEditorStore.subscribe((state) => {
+      if (state.project === previousDocument && state.studioProject === previousStudioProject) return;
+      previousDocument = state.project;
+      previousStudioProject = state.studioProject;
+      scheduleSave();
+    });
     const flushWhenHidden = () => {
       if (document.visibilityState === 'hidden') {
         if (timer !== null) window.clearTimeout(timer);
-        void saveAutosave(useEditorStore.getState().project).catch(() => undefined);
+        void saveAutosave(useEditorStore.getState().getStudioProjectSnapshot()).catch(() => undefined);
       }
     };
     document.addEventListener('visibilitychange', flushWhenHidden);
@@ -230,7 +240,7 @@ export function EditorApp() {
   };
 
   const handleProjectExport = () => {
-    downloadProjectFile(useEditorStore.getState().project);
+    downloadProjectFile(useEditorStore.getState().getStudioProjectSnapshot());
     setNotice('プロジェクトを1ファイルへ書き出しました。', 'success');
   };
 
@@ -244,8 +254,8 @@ export function EditorApp() {
 
   const confirmProjectImport = () => {
     if (!pendingProjectImport) return;
-    replaceProject(pendingProjectImport);
-    const warning = getFontRestoreWarning(pendingProjectImport);
+    replaceStudioProject(pendingProjectImport);
+    const warning = pendingProjectImport.frames.map((frame) => getFontRestoreWarning(frame.document)).find(Boolean) ?? null;
     setPendingProjectImport(null);
     setNotice(warning ?? 'プロジェクトを読み込みました。', warning ? 'warning' : 'success');
   };
@@ -266,6 +276,17 @@ export function EditorApp() {
       const count = await exportAllGraphicsPng(useEditorStore.getState().project.objects);
       if (count === 0) throw new Error('書き出せる表示中のテキストがありません。');
     }, 'すべての表示中テキストを個別に保存しました。');
+  };
+
+  const handleExportFrames = () => {
+    void runTask(async () => {
+      const count = await exportAllFramesPng(useEditorStore.getState().getStudioProjectSnapshot());
+      if (!count) throw new Error('書き出せるコマがありません。');
+    }, '全コマを現在順のPNGで保存しました。');
+  };
+
+  const handleExportFramesZip = () => {
+    void runTask(() => exportAllFramesZip(useEditorStore.getState().getStudioProjectSnapshot()), '全コマをZIP保存しました。');
   };
 
   const handleSaveTemplate = (includePosition: boolean) => {
@@ -293,15 +314,16 @@ export function EditorApp() {
 
   const restoreSavedProject = () => {
     if (!restoreCandidate) return;
-    replaceProject(restoreCandidate);
+    replaceStudioProject(restoreCandidate);
     setRestoreCandidate(null);
     setPersistenceReady(true);
-    const warning = getFontRestoreWarning(restoreCandidate);
+    const warning = restoreCandidate.frames.map((frame) => getFontRestoreWarning(frame.document)).find(Boolean) ?? null;
     setNotice(warning ?? '前回の作業を復元しました。', warning ? 'warning' : 'success');
   };
 
   const discardSavedProject = () => {
-    replaceProject(createInitialProject(loadPalettePreference(), restoreCandidate?.fontCatalog ?? project.fontCatalog));
+    const fontCatalog = restoreCandidate?.frames.flatMap((frame) => frame.document.fontCatalog) ?? project.fontCatalog;
+    replaceStudioProject(createStudioProject(loadPalettePreference(), fontCatalog));
     setRestoreCandidate(null);
     setPersistenceReady(true);
     void clearAutosave().catch(() => undefined);
@@ -332,6 +354,11 @@ export function EditorApp() {
       data-selected-character-scale={selected ? JSON.stringify(selected.characterScale) : ''}
       data-quick-partial-preset-count={quickPartialPresetCount}
       data-selected-line-gap-offsets={selected ? JSON.stringify(selected.lineGapOffsets ?? []) : ''}
+      data-project-id={studioProject.projectId}
+      data-project-name={studioProject.projectName}
+      data-frame-count={studioProject.frames.length}
+      data-active-frame-id={studioProject.activeFrameId}
+      data-active-frame-locked={String(studioProject.frames.find((frame) => frame.frameId === studioProject.activeFrameId)?.completedLocked ?? false)}
     >
       <EditorToolbar
         busy={busy}
@@ -343,9 +370,13 @@ export function EditorApp() {
         onExportProject={handleExportProject}
         onExportSelected={handleExportSelected}
         onExportAll={handleExportAll}
+        onExportFrames={handleExportFrames}
+        onExportFramesZip={handleExportFramesZip}
         onSaveTemplate={handleSaveTemplate}
         onLoadTemplate={() => templateInputRef.current?.click()}
       />
+
+      <Storyboard />
 
       <input
         ref={templateInputRef}
@@ -382,6 +413,8 @@ export function EditorApp() {
           onExportProject={handleExportProject}
           onExportSelected={handleExportSelected}
           onExportAll={handleExportAll}
+          onExportFrames={handleExportFrames}
+          onExportFramesZip={handleExportFramesZip}
           onSaveTemplate={handleSaveTemplate}
           onLoadTemplate={() => templateInputRef.current?.click()}
         />
@@ -424,7 +457,7 @@ export function EditorApp() {
             <AlertDialogMedia><RefreshCw aria-hidden="true" /></AlertDialogMedia>
             <AlertDialogTitle>前回の作業を復元しますか</AlertDialogTitle>
             <AlertDialogDescription>
-              {restoreCandidate ? `${formatSavedAt(restoreCandidate.updatedAt)} に保存された作業があります。` : ''}
+              {restoreCandidate ? `${formatSavedAt(restoreCandidate.updatedAt)} に保存された${restoreCandidate.frames.length}コマの作業があります。` : ''}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -439,7 +472,7 @@ export function EditorApp() {
           <AlertDialogHeader>
             <AlertDialogMedia><AlertTriangle aria-hidden="true" /></AlertDialogMedia>
             <AlertDialogTitle>新しいプロジェクトを開始しますか</AlertDialogTitle>
-            <AlertDialogDescription>現在のキャンバスを初期状態へ戻します。この操作は「元に戻す」で復元できます。</AlertDialogDescription>
+            <AlertDialogDescription>現在のProject全体を新しい1コマ構成へ置き換えます。この操作は元に戻せません。</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>キャンセル</AlertDialogCancel>
