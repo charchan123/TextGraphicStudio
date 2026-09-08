@@ -1,12 +1,13 @@
 'use client';
 
 import type { ComponentProps } from 'react';
-import { Archive, Eye, FileDown, FileJson, FolderDown, FolderInput, Images, PackageOpen, ImageDown, Save } from 'lucide-react';
+import { Archive, BookOpenText, Eye, FileDown, FileJson, FolderDown, FolderInput, Images, PackageOpen, ImageDown, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ToolbarTooltip } from '@/src/components/ToolbarTooltip';
 
 export const EDITOR_ACTIONS = {
   outputPreview: { icon: Eye, label: '出力プレビュー' },
+  projectTextOverview: { icon: BookOpenText, label: '全コマ文章一覧' },
   projectExport: { icon: PackageOpen, label: 'プロジェクトを書き出す' },
   projectImport: { icon: FolderInput, label: 'プロジェクトを読み込む' },
   templateLoad: { icon: FileJson, label: 'テンプレートJSONを読み込む' },

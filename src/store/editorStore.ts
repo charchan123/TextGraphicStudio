@@ -18,6 +18,7 @@ import {
 } from '@/src/services/studioProject';
 import { cloneQuickPartialOperation, cloneQuickPartialPreset, MAX_QUICK_PARTIAL_PRESETS } from '@/src/services/quickPartialPresets';
 import { cloneTextDesignDefaults, textDesignDefaultsEqual, toTextDesignDefaults } from '@/src/services/textDefaults';
+import { updateGraphicTextContent } from '@/src/services/textContent';
 import type {
   AppNotice,
   BackgroundImageData,
@@ -36,6 +37,16 @@ type ObjectUpdater = (object: GraphicTextObject) => GraphicTextObject;
 type LayerDirection = 'front' | 'forward' | 'backward' | 'back';
 type CanvasCenterMode = 'horizontal' | 'vertical' | 'both';
 type SocialGuide = NonNullable<ProjectDocument['canvas']['socialGuide']>;
+
+export interface ProjectTextChange {
+  frameId: string;
+  objectId: string;
+  text: string;
+}
+
+export type ApplyProjectTextChangesResult =
+  | { ok: true; changedCount: number }
+  | { ok: false; message: string };
 
 interface EditorState {
   studioProject: StudioProject;
@@ -89,6 +100,7 @@ interface EditorState {
   reorderFrame: (fromIndex: number, toIndex: number) => void;
   selectFrame: (frameId: string) => void;
   setFrameCompletedLocked: (frameId: string, locked: boolean) => void;
+  applyProjectTextChanges: (changes: ProjectTextChange[]) => ApplyProjectTextChangesResult;
   createNewProject: () => void;
   undo: () => void;
   redo: () => void;
@@ -622,6 +634,91 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       past: [], future: [], transactionBase: null,
     };
   }),
+
+  applyProjectTextChanges: (requestedChanges) => {
+    let result: ApplyProjectTextChangesResult = { ok: false, message: '文章変更を反映できませんでした。' };
+    set((state) => {
+      const studioProject = materializeActiveDocument(state.studioProject, state.project);
+      const changesByFrame = new Map<string, Map<string, string>>();
+
+      for (const change of requestedChanges) {
+        const frame = studioProject.frames.find((item) => item.frameId === change.frameId);
+        if (!frame) {
+          result = { ok: false, message: '対象のコマが見つからないため、変更を反映しませんでした。' };
+          return state;
+        }
+        if (frame.completedLocked) {
+          result = { ok: false, message: `「${frame.name}」は完成ロック中のため、変更を反映しませんでした。` };
+          return state;
+        }
+        const object = frame.document.objects.find((item) => item.id === change.objectId);
+        if (!object || object.kind !== 'graphic-text') {
+          result = { ok: false, message: '対象のテキストが見つからないため、変更を反映しませんでした。' };
+          return state;
+        }
+        if (object.fullyLocked) {
+          result = { ok: false, message: `「${object.name}」は完全ロック中のため、変更を反映しませんでした。` };
+          return state;
+        }
+        let frameChanges = changesByFrame.get(change.frameId);
+        if (!frameChanges) {
+          frameChanges = new Map<string, string>();
+          changesByFrame.set(change.frameId, frameChanges);
+        }
+        if (frameChanges.has(change.objectId)) {
+          result = { ok: false, message: '同じテキストへの変更が重複しているため、変更を反映しませんでした。' };
+          return state;
+        }
+        frameChanges.set(change.objectId, change.text);
+      }
+
+      if (changesByFrame.size === 0) {
+        result = { ok: true, changedCount: 0 };
+        return state;
+      }
+
+      const now = new Date().toISOString();
+      let changedCount = 0;
+      try {
+        const frames = studioProject.frames.map((frame) => {
+          const frameChanges = changesByFrame.get(frame.frameId);
+          if (!frameChanges) return frame;
+          let frameChanged = false;
+          const objects = frame.document.objects.map((object) => {
+            const nextText = frameChanges.get(object.id);
+            if (nextText === undefined || nextText === object.text) return object;
+            frameChanged = true;
+            changedCount += 1;
+            return updateGraphicTextContent(object, nextText);
+          });
+          if (!frameChanged) return frame;
+          return {
+            ...frame,
+            document: { ...frame.document, objects, updatedAt: now },
+            updatedAt: now,
+          };
+        });
+        if (changedCount === 0) {
+          result = { ok: true, changedCount: 0 };
+          return state;
+        }
+        const nextStudioProject = { ...studioProject, frames, updatedAt: now };
+        const activeDocument = frames.find((frame) => frame.frameId === nextStudioProject.activeFrameId)!.document;
+        result = { ok: true, changedCount };
+        return {
+          studioProject: nextStudioProject,
+          project: activeDocument,
+          past: [],
+          future: [],
+          transactionBase: null,
+        };
+      } catch {
+        result = { ok: false, message: '文章の正規化中に問題が発生したため、変更前のProjectを維持しました。' };
+        return state;
+      }
+    });
+    return result;
+  },
 
   createNewProject: () =>
     set((state) => {

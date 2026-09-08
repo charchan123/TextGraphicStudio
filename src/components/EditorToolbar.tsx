@@ -21,6 +21,7 @@ interface EditorToolbarProps {
   onRequestNew: () => void;
   onBackgroundFile: (file: File) => void;
   onPreview: () => void;
+  onOpenTextOverview: () => void;
   onProjectExport: () => void;
   onProjectFile: (file: File) => void;
   onExportProject: () => void;
@@ -37,6 +38,7 @@ export function EditorToolbar({
   onRequestNew,
   onBackgroundFile,
   onPreview,
+  onOpenTextOverview,
   onProjectExport,
   onProjectFile,
   onExportProject,
@@ -117,6 +119,7 @@ export function EditorToolbar({
 
       <div className="toolbar-export">
         <CanvasSizeControl />
+        <EditorActionButton action="projectTextOverview" iconOnly variant="outline" size="icon-lg" disabled={busy} onClick={onOpenTextOverview} />
         <EditorActionButton action="outputPreview" iconOnly variant="outline" size="icon-lg" disabled={busy} onClick={onPreview} />
         <EditorActionButton action="projectExport" iconOnly variant="outline" size="icon-lg" disabled={busy} onClick={onProjectExport} />
         <EditorActionButton action="projectImport" iconOnly variant="outline" size="icon-lg" disabled={busy} onClick={() => projectInputRef.current?.click()} />

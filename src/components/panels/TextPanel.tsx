@@ -11,8 +11,7 @@ import { SliderField } from '@/src/components/controls/SliderField';
 import { SelectionEmpty } from '@/src/components/panels/SelectionEmpty';
 import { PartialStyleEditor } from '@/src/components/panels/PartialStyleEditor';
 import { LineGapEditor } from '@/src/components/panels/LineGapEditor';
-import { adjustRangesForTextEdit } from '@/src/services/partialStyles';
-import { normalizeLineGapOffsets } from '@/src/services/lineGapOffsets';
+import { updateGraphicTextContent } from '@/src/services/textContent';
 import { useObjectEditor } from '@/src/hooks/useObjectEditor';
 import { useEditorStore } from '@/src/store/editorStore';
 import type { CharacterScaleStyle, FontStyleMode, TextAlignment } from '@/src/types/editor';
@@ -91,13 +90,7 @@ export function TextPanel() {
               aria-label="選択中のテキスト内容"
               onFocus={editor.begin}
               onChange={(event) => {
-                const text = event.currentTarget.value.replace(/\r\n?/g, '\n');
-                editor.preview((object) => ({
-                  ...object,
-                  text,
-                  partialStyles: adjustRangesForTextEdit(object.text, text, object.partialStyles),
-                  lineGapOffsets: normalizeLineGapOffsets(text, object.lineGapOffsets),
-                }));
+                editor.preview((object) => updateGraphicTextContent(object, event.currentTarget.value));
               }}
               onSelect={(event) => setRange({ id: selected.id, text: selected.text, start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd })}
               onBlur={editor.finish}

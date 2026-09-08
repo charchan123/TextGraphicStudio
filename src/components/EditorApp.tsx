@@ -18,6 +18,7 @@ import { FabricCanvas } from '@/src/canvas/FabricCanvas';
 import { EditorToolbar } from '@/src/components/EditorToolbar';
 import { InspectorPanel } from '@/src/components/InspectorPanel';
 import { OutputPreviewDialog } from '@/src/components/OutputPreviewDialog';
+import { ProjectTextOverviewDialog } from '@/src/components/ProjectTextOverviewDialog';
 import { Storyboard } from '@/src/components/Storyboard';
 import { useKeyboardShortcuts } from '@/src/hooks/useKeyboardShortcuts';
 import { useWebMcp } from '@/src/hooks/useWebMcp';
@@ -60,6 +61,7 @@ export function EditorApp() {
   const [newDialogOpen, setNewDialogOpen] = useState(false);
   const [pendingProjectImport, setPendingProjectImport] = useState<StudioProject | null>(null);
   const [outputPreview, setOutputPreview] = useState<{ url: string; width: number; height: number } | null>(null);
+  const [textOverviewOpen, setTextOverviewOpen] = useState(false);
 
   const project = useEditorStore((state) => state.project);
   const studioProject = useEditorStore((state) => state.studioProject);
@@ -365,6 +367,7 @@ export function EditorApp() {
         onRequestNew={() => setNewDialogOpen(true)}
         onBackgroundFile={handleBackgroundFile}
         onPreview={handleOutputPreview}
+        onOpenTextOverview={() => setTextOverviewOpen(true)}
         onProjectExport={handleProjectExport}
         onProjectFile={handleProjectFile}
         onExportProject={handleExportProject}
@@ -436,6 +439,7 @@ export function EditorApp() {
       {busy && <output className="busy-indicator">処理中…</output>}
 
       <OutputPreviewDialog key={outputPreview?.url ?? 'closed'} preview={outputPreview} onClose={() => setOutputPreview(null)} />
+      {textOverviewOpen && <ProjectTextOverviewDialog open onOpenChange={setTextOverviewOpen} />}
 
       <AlertDialog open={Boolean(pendingProjectImport)} onOpenChange={(open) => { if (!open) setPendingProjectImport(null); }}>
         <AlertDialogContent>
