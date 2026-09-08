@@ -3,8 +3,11 @@
 import { useRef } from 'react';
 import {
   Copy,
+  EyeOff,
   FilePlus2,
   ImagePlus,
+  PanelLeft,
+  PanelTop,
   Redo2,
   Trash2,
   Undo2,
@@ -15,6 +18,7 @@ import { CanvasSizeControl } from '@/src/components/CanvasSizeControl';
 import { ToolbarTooltip } from '@/src/components/ToolbarTooltip';
 import { EditorActionButton } from '@/src/components/EditorActionButton';
 import { useEditorStore } from '@/src/store/editorStore';
+import type { StoryboardPlacement } from '@/src/components/Storyboard';
 
 interface EditorToolbarProps {
   busy: boolean;
@@ -31,6 +35,8 @@ interface EditorToolbarProps {
   onExportFramesZip: () => void;
   onSaveTemplate: (includePosition: boolean) => void;
   onLoadTemplate: () => void;
+  storyboardPlacement: StoryboardPlacement;
+  onStoryboardPlacementChange: (placement: StoryboardPlacement) => void;
 }
 
 export function EditorToolbar({
@@ -48,6 +54,8 @@ export function EditorToolbar({
   onExportFramesZip,
   onSaveTemplate,
   onLoadTemplate,
+  storyboardPlacement,
+  onStoryboardPlacementChange,
 }: EditorToolbarProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const projectInputRef = useRef<HTMLInputElement | null>(null);
@@ -118,6 +126,23 @@ export function EditorToolbar({
       </nav>
 
       <div className="toolbar-export">
+        <fieldset className="storyboard-layout-controls" aria-label="Storyboardの表示位置">
+          <ToolbarTooltip label="Storyboardを左に表示">
+            <Button type="button" variant={storyboardPlacement === 'left' ? 'default' : 'ghost'} size="icon-sm" aria-label="Storyboardを左に表示" aria-pressed={storyboardPlacement === 'left'} onClick={() => onStoryboardPlacementChange('left')}>
+              <PanelLeft aria-hidden="true" />
+            </Button>
+          </ToolbarTooltip>
+          <ToolbarTooltip label="Storyboardを上に表示">
+            <Button type="button" variant={storyboardPlacement === 'top' ? 'default' : 'ghost'} size="icon-sm" aria-label="Storyboardを上に表示" aria-pressed={storyboardPlacement === 'top'} onClick={() => onStoryboardPlacementChange('top')}>
+              <PanelTop aria-hidden="true" />
+            </Button>
+          </ToolbarTooltip>
+          <ToolbarTooltip label="Storyboardを非表示">
+            <Button type="button" variant={storyboardPlacement === 'hidden' ? 'default' : 'ghost'} size="icon-sm" aria-label="Storyboardを非表示" aria-pressed={storyboardPlacement === 'hidden'} onClick={() => onStoryboardPlacementChange('hidden')}>
+              <EyeOff aria-hidden="true" />
+            </Button>
+          </ToolbarTooltip>
+        </fieldset>
         <CanvasSizeControl />
         <EditorActionButton action="projectTextOverview" iconOnly variant="outline" size="icon-lg" disabled={busy} onClick={onOpenTextOverview} />
         <EditorActionButton action="outputPreview" iconOnly variant="outline" size="icon-lg" disabled={busy} onClick={onPreview} />

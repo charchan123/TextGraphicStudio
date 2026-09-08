@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { EyeOff, LockKeyhole, MapPin, Rows3 } from 'lucide-react';
+import { EyeOff, LockKeyhole, MapPin, Rows3, SquarePen } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -23,6 +23,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Textarea } from '@/components/ui/textarea';
+import { getFrameDisplayLabel } from '@/src/services/frameLabels';
 import { useEditorStore } from '@/src/store/editorStore';
 
 interface TextDraft {
@@ -50,21 +51,24 @@ interface FrameDraftGroup {
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onEditOnCanvas: (frameId: string, objectId: string) => void;
 }
 
 const collectDrafts = (): FrameDraftGroup[] => {
   const project = useEditorStore.getState().getStudioProjectSnapshot();
-  return project.frames.map((frame, frameIndex) => ({
+  return project.frames.map((frame, frameIndex) => {
+    const frameName = getFrameDisplayLabel(frameIndex);
+    return {
     frameId: frame.frameId,
     frameIndex,
-    frameName: frame.name,
+    frameName,
     frameCompletedLocked: frame.completedLocked,
     drafts: [...frame.document.objects].filter((object) => object.kind === 'graphic-text')
       .sort((left, right) => left.zIndex - right.zIndex)
       .map((object) => ({
       frameId: frame.frameId,
       frameIndex,
-      frameName: frame.name,
+      frameName,
       frameCompletedLocked: frame.completedLocked,
       objectId: object.id,
       objectName: object.name,
@@ -74,12 +78,14 @@ const collectDrafts = (): FrameDraftGroup[] => {
       positionLocked: object.locked,
       fullyLocked: Boolean(object.fullyLocked),
       })),
-  }));
+    };
+  });
 };
 
-export function ProjectTextOverviewDialog({ open, onOpenChange }: Props) {
+export function ProjectTextOverviewDialog({ open, onOpenChange, onEditOnCanvas }: Props) {
   const [frameGroups, setFrameGroups] = useState<FrameDraftGroup[]>(collectDrafts);
   const [discardOpen, setDiscardOpen] = useState(false);
+  const [pendingCanvasTarget, setPendingCanvasTarget] = useState<{ frameId: string; objectId: string } | null>(null);
   const [isComposing, setIsComposing] = useState(false);
   const setNotice = useEditorStore((state) => state.setNotice);
   const applyProjectTextChanges = useEditorStore((state) => state.applyProjectTextChanges);
@@ -96,8 +102,29 @@ export function ProjectTextOverviewDialog({ open, onOpenChange }: Props) {
 
   const requestClose = () => {
     if (isComposing) return;
-    if (changedDrafts.length > 0) setDiscardOpen(true);
+    if (changedDrafts.length > 0) {
+      setPendingCanvasTarget(null);
+      setDiscardOpen(true);
+    }
     else closeNow();
+  };
+
+  const moveToCanvas = (frameId: string, objectId: string) => {
+    if (isComposing) return;
+    if (changedDrafts.length > 0) {
+      setPendingCanvasTarget({ frameId, objectId });
+      setDiscardOpen(true);
+      return;
+    }
+    onOpenChange(false);
+    onEditOnCanvas(frameId, objectId);
+  };
+
+  const discardAndContinue = () => {
+    const target = pendingCanvasTarget;
+    setPendingCanvasTarget(null);
+    closeNow();
+    if (target) onEditOnCanvas(target.frameId, target.objectId);
   };
 
   const applyChanges = () => {
@@ -133,8 +160,7 @@ export function ProjectTextOverviewDialog({ open, onOpenChange }: Props) {
               return (
                 <section className="project-text-frame" key={frameGroup.frameId} data-frame-id={frameGroup.frameId}>
                   <header className="project-text-frame-header">
-                    <span className="project-text-frame-number">{String(frameGroup.frameIndex).padStart(2, '0')}</span>
-                    <strong>{frameGroup.frameName}</strong>
+                    <span className="project-text-frame-number">{frameGroup.frameName}</span>
                     {frameGroup.frameCompletedLocked && <span className="project-text-lock-badge"><LockKeyhole aria-hidden="true" />完成</span>}
                   </header>
                   <div className="project-text-fields">
@@ -151,13 +177,16 @@ export function ProjectTextOverviewDialog({ open, onOpenChange }: Props) {
                               {draft.fullyLocked && <span><LockKeyhole aria-hidden="true" />完全ロック</span>}
                               {!draft.fullyLocked && draft.positionLocked && <span><MapPin aria-hidden="true" />位置ロック（本文編集可）</span>}
                             </span>
+                            <Button type="button" variant="outline" size="sm" className="project-text-edit-canvas" onClick={() => moveToCanvas(draft.frameId, draft.objectId)}>
+                              <SquarePen aria-hidden="true" />キャンバスで編集
+                            </Button>
                           </span>
                           <Textarea
                             id={inputId}
                             value={draft.text}
                             rows={Math.max(2, Math.min(7, draft.text.split('\n').length + 1))}
                             disabled={readOnly}
-                            aria-label={`${String(draft.frameIndex).padStart(2, '0')} ${draft.frameName} ${draft.objectName}`}
+                            aria-label={`${draft.frameName} ${draft.objectName}`}
                             data-text-draft={`${draft.frameId}:${draft.objectId}`}
                             onCompositionStart={() => setIsComposing(true)}
                             onCompositionEnd={(event) => {
@@ -201,11 +230,13 @@ export function ProjectTextOverviewDialog({ open, onOpenChange }: Props) {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>未反映の文章変更があります</AlertDialogTitle>
-            <AlertDialogDescription>{changedDrafts.length}件の変更を破棄して文章一覧を閉じますか？</AlertDialogDescription>
+            <AlertDialogDescription>{pendingCanvasTarget
+              ? `${changedDrafts.length}件の変更を破棄してキャンバスへ移動しますか？`
+              : `${changedDrafts.length}件の変更を破棄して文章一覧を閉じますか？`}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>一覧へ戻る</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={closeNow}>変更を破棄して閉じる</AlertDialogAction>
+            <AlertDialogAction variant="destructive" onClick={discardAndContinue}>{pendingCanvasTarget ? '変更を破棄してキャンバスへ移動' : '変更を破棄して閉じる'}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

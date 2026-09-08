@@ -17,10 +17,11 @@ import {
 import { FabricCanvas } from '@/src/canvas/FabricCanvas';
 import { EditorToolbar } from '@/src/components/EditorToolbar';
 import { InspectorPanel } from '@/src/components/InspectorPanel';
-import { OutputPreviewDialog } from '@/src/components/OutputPreviewDialog';
+import { OutputPreviewDialog, type OutputPreview } from '@/src/components/OutputPreviewDialog';
 import { ProjectTextOverviewDialog } from '@/src/components/ProjectTextOverviewDialog';
-import { Storyboard } from '@/src/components/Storyboard';
+import { Storyboard, type StoryboardPlacement } from '@/src/components/Storyboard';
 import { useKeyboardShortcuts } from '@/src/hooks/useKeyboardShortcuts';
+import { useClientHydrated } from '@/src/hooks/useClientHydrated';
 import { useWebMcp } from '@/src/hooks/useWebMcp';
 import { exportAllFramesPng, exportAllFramesZip, exportAllGraphicsPng, exportGraphicPng, exportProjectPng, renderProjectPngBlob } from '@/src/services/exportService';
 import { loadBackgroundFile } from '@/src/services/imageService';
@@ -53,15 +54,28 @@ const formatSavedAt = (isoDate: string): string => {
   }).format(date);
 };
 
+const storyboardPlacementForCanvas = (width: number, height: number): Exclude<StoryboardPlacement, 'hidden'> =>
+  width > height ? 'top' : 'left';
+
 export function EditorApp() {
+  const clientHydrated = useClientHydrated();
   const templateInputRef = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [persistenceReady, setPersistenceReady] = useState(false);
   const [restoreCandidate, setRestoreCandidate] = useState<StudioProject | null>(null);
   const [newDialogOpen, setNewDialogOpen] = useState(false);
   const [pendingProjectImport, setPendingProjectImport] = useState<StudioProject | null>(null);
-  const [outputPreview, setOutputPreview] = useState<{ url: string; width: number; height: number } | null>(null);
+  const [outputPreview, setOutputPreview] = useState<OutputPreview | null>(null);
+  const [outputPreviewNavigating, setOutputPreviewNavigating] = useState(false);
+  const outputPreviewRequest = useRef(0);
   const [textOverviewOpen, setTextOverviewOpen] = useState(false);
+  const [storyboardPlacement, setStoryboardPlacement] = useState<StoryboardPlacement>(() => {
+    const canvas = useEditorStore.getState().project.canvas;
+    return storyboardPlacementForCanvas(canvas.width, canvas.height);
+  });
+  const [storyboardCollapsed, setStoryboardCollapsed] = useState(false);
+  const [inspectorTab, setInspectorTab] = useState('text');
+  const [canvasEditRequest, setCanvasEditRequest] = useState(0);
 
   const project = useEditorStore((state) => state.project);
   const studioProject = useEditorStore((state) => state.studioProject);
@@ -209,6 +223,21 @@ export function EditorApp() {
     if (outputPreview?.url) URL.revokeObjectURL(outputPreview.url);
   }, [outputPreview?.url]);
 
+  useEffect(() => {
+    if (!canvasEditRequest) return;
+    const animationFrame = window.requestAnimationFrame(() => {
+      const textField = document.querySelector<HTMLElement>('[aria-label="選択中のテキスト内容"]');
+      textField?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      textField?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [canvasEditRequest]);
+
+  const resetStoryboardLayout = (width: number, height: number) => {
+    setStoryboardPlacement(storyboardPlacementForCanvas(width, height));
+    setStoryboardCollapsed(false);
+  };
+
   const runTask = async (task: () => Promise<void>, successMessage: string) => {
     setBusy(true);
     try {
@@ -233,12 +262,71 @@ export function EditorApp() {
   };
 
   const handleOutputPreview = () => {
+    const requestId = outputPreviewRequest.current + 1;
+    outputPreviewRequest.current = requestId;
     setOutputPreview(null);
     void runTask(async () => {
-      const current = useEditorStore.getState().project;
-      const blob = await renderProjectPngBlob(current);
-      setOutputPreview({ url: URL.createObjectURL(blob), width: current.canvas.width, height: current.canvas.height });
+      const snapshot = useEditorStore.getState().getStudioProjectSnapshot();
+      const activeIndex = Math.max(0, snapshot.frames.findIndex((frame) => frame.frameId === snapshot.activeFrameId));
+      const frame = snapshot.frames[activeIndex];
+      const blob = await renderProjectPngBlob(frame.document);
+      const url = URL.createObjectURL(blob);
+      if (requestId !== outputPreviewRequest.current) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+      setOutputPreview({
+        url,
+        width: frame.document.canvas.width,
+        height: frame.document.canvas.height,
+        frameId: frame.frameId,
+        frameIndex: activeIndex,
+        frameCount: snapshot.frames.length,
+      });
     }, '最新の出力プレビューを生成しました。');
+  };
+
+  const closeOutputPreview = () => {
+    outputPreviewRequest.current += 1;
+    setOutputPreviewNavigating(false);
+    setOutputPreview(null);
+  };
+
+  const navigateOutputPreview = (offset: -1 | 1) => {
+    if (!outputPreview || outputPreviewNavigating) return;
+    const snapshot = useEditorStore.getState().getStudioProjectSnapshot();
+    const currentIndex = snapshot.frames.findIndex((frame) => frame.frameId === outputPreview.frameId);
+    const targetIndex = currentIndex + offset;
+    const targetFrame = snapshot.frames[targetIndex];
+    if (currentIndex < 0 || !targetFrame) return;
+
+    const requestId = outputPreviewRequest.current + 1;
+    outputPreviewRequest.current = requestId;
+    setOutputPreviewNavigating(true);
+    void renderProjectPngBlob(targetFrame.document)
+      .then((blob) => {
+        const url = URL.createObjectURL(blob);
+        if (requestId !== outputPreviewRequest.current) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        setOutputPreview({
+          url,
+          width: targetFrame.document.canvas.width,
+          height: targetFrame.document.canvas.height,
+          frameId: targetFrame.frameId,
+          frameIndex: targetIndex,
+          frameCount: snapshot.frames.length,
+        });
+      })
+      .catch((error) => {
+        if (requestId === outputPreviewRequest.current) {
+          setNotice(error instanceof Error ? error.message : 'プレビューを生成できませんでした。', 'error');
+        }
+      })
+      .finally(() => {
+        if (requestId === outputPreviewRequest.current) setOutputPreviewNavigating(false);
+      });
   };
 
   const handleProjectExport = () => {
@@ -256,6 +344,9 @@ export function EditorApp() {
 
   const confirmProjectImport = () => {
     if (!pendingProjectImport) return;
+    const activeDocument = pendingProjectImport.frames.find((frame) => frame.frameId === pendingProjectImport.activeFrameId)?.document
+      ?? pendingProjectImport.frames[0]?.document;
+    if (activeDocument) resetStoryboardLayout(activeDocument.canvas.width, activeDocument.canvas.height);
     replaceStudioProject(pendingProjectImport);
     const warning = pendingProjectImport.frames.map((frame) => getFontRestoreWarning(frame.document)).find(Boolean) ?? null;
     setPendingProjectImport(null);
@@ -316,6 +407,9 @@ export function EditorApp() {
 
   const restoreSavedProject = () => {
     if (!restoreCandidate) return;
+    const activeDocument = restoreCandidate.frames.find((frame) => frame.frameId === restoreCandidate.activeFrameId)?.document
+      ?? restoreCandidate.frames[0]?.document;
+    if (activeDocument) resetStoryboardLayout(activeDocument.canvas.width, activeDocument.canvas.height);
     replaceStudioProject(restoreCandidate);
     setRestoreCandidate(null);
     setPersistenceReady(true);
@@ -325,11 +419,29 @@ export function EditorApp() {
 
   const discardSavedProject = () => {
     const fontCatalog = restoreCandidate?.frames.flatMap((frame) => frame.document.fontCatalog) ?? project.fontCatalog;
-    replaceStudioProject(createStudioProject(loadPalettePreference(), fontCatalog));
+    const nextProject = createStudioProject(loadPalettePreference(), fontCatalog);
+    const nextDocument = nextProject.frames[0].document;
+    resetStoryboardLayout(nextDocument.canvas.width, nextDocument.canvas.height);
+    replaceStudioProject(nextProject);
     setRestoreCandidate(null);
     setPersistenceReady(true);
     void clearAutosave().catch(() => undefined);
     setNotice('新しいプロジェクトを開始しました。', 'info');
+  };
+
+  const editTextOnCanvas = (frameId: string, objectId: string) => {
+    const snapshot = useEditorStore.getState().getStudioProjectSnapshot();
+    const frame = snapshot.frames.find((item) => item.frameId === frameId);
+    const object = frame?.document.objects.find((item) => item.id === objectId && item.kind === 'graphic-text');
+    if (!frame || !object) {
+      setNotice('対象のテキストが見つかりませんでした。', 'error');
+      return;
+    }
+    useEditorStore.getState().selectFrame(frameId);
+    useEditorStore.getState().selectObject(objectId);
+    setTextOverviewOpen(false);
+    setInspectorTab('text');
+    setCanvasEditRequest((value) => value + 1);
   };
 
   return (
@@ -356,10 +468,10 @@ export function EditorApp() {
       data-selected-character-scale={selected ? JSON.stringify(selected.characterScale) : ''}
       data-quick-partial-preset-count={quickPartialPresetCount}
       data-selected-line-gap-offsets={selected ? JSON.stringify(selected.lineGapOffsets ?? []) : ''}
-      data-project-id={studioProject.projectId}
+      data-project-id={clientHydrated ? studioProject.projectId : undefined}
       data-project-name={studioProject.projectName}
       data-frame-count={studioProject.frames.length}
-      data-active-frame-id={studioProject.activeFrameId}
+      data-active-frame-id={clientHydrated ? studioProject.activeFrameId : undefined}
       data-active-frame-locked={String(studioProject.frames.find((frame) => frame.frameId === studioProject.activeFrameId)?.completedLocked ?? false)}
     >
       <EditorToolbar
@@ -377,9 +489,12 @@ export function EditorApp() {
         onExportFramesZip={handleExportFramesZip}
         onSaveTemplate={handleSaveTemplate}
         onLoadTemplate={() => templateInputRef.current?.click()}
+        storyboardPlacement={storyboardPlacement}
+        onStoryboardPlacementChange={(placement) => {
+          setStoryboardPlacement(placement);
+          setStoryboardCollapsed(false);
+        }}
       />
-
-      <Storyboard />
 
       <input
         ref={templateInputRef}
@@ -394,7 +509,9 @@ export function EditorApp() {
         }}
       />
 
-      <section className="editor-main">
+      <section className={`editor-body storyboard-layout-${storyboardPlacement}${storyboardCollapsed ? ' is-storyboard-collapsed' : ''}`} data-storyboard-placement={storyboardPlacement} data-storyboard-collapsed={String(storyboardCollapsed)}>
+        {storyboardPlacement !== 'hidden' && <Storyboard placement={storyboardPlacement} collapsed={storyboardCollapsed} onCollapsedChange={setStoryboardCollapsed} />}
+        <section className="editor-main">
         <section className="stage" aria-label="キャンバス作業領域">
           <div className="stage-head">
             <div>
@@ -412,6 +529,8 @@ export function EditorApp() {
         </section>
 
         <InspectorPanel
+          activeTab={inspectorTab}
+          onActiveTabChange={setInspectorTab}
           busy={busy}
           onExportProject={handleExportProject}
           onExportSelected={handleExportSelected}
@@ -421,6 +540,7 @@ export function EditorApp() {
           onSaveTemplate={handleSaveTemplate}
           onLoadTemplate={() => templateInputRef.current?.click()}
         />
+        </section>
       </section>
 
       {!persistenceReady && !restoreCandidate && (
@@ -438,8 +558,14 @@ export function EditorApp() {
 
       {busy && <output className="busy-indicator">処理中…</output>}
 
-      <OutputPreviewDialog key={outputPreview?.url ?? 'closed'} preview={outputPreview} onClose={() => setOutputPreview(null)} />
-      {textOverviewOpen && <ProjectTextOverviewDialog open onOpenChange={setTextOverviewOpen} />}
+      {outputPreview && <OutputPreviewDialog
+        preview={outputPreview}
+        navigating={outputPreviewNavigating}
+        onPrevious={() => navigateOutputPreview(-1)}
+        onNext={() => navigateOutputPreview(1)}
+        onClose={closeOutputPreview}
+      />}
+      {textOverviewOpen && <ProjectTextOverviewDialog open onOpenChange={setTextOverviewOpen} onEditOnCanvas={editTextOnCanvas} />}
 
       <AlertDialog open={Boolean(pendingProjectImport)} onOpenChange={(open) => { if (!open) setPendingProjectImport(null); }}>
         <AlertDialogContent>
@@ -482,6 +608,8 @@ export function EditorApp() {
             <AlertDialogCancel>キャンセル</AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={() => {
               createNewProject();
+              const canvas = useEditorStore.getState().project.canvas;
+              resetStoryboardLayout(canvas.width, canvas.height);
               setNewDialogOpen(false);
             }}>新規プロジェクト</AlertDialogAction>
           </AlertDialogFooter>

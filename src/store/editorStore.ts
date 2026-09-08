@@ -602,7 +602,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
   reorderFrame: (fromIndex, toIndex) => set((state) => {
     const studioProject = materializeActiveDocument(state.studioProject, state.project);
-    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= studioProject.frames.length || toIndex >= studioProject.frames.length) return state;
+    if (fromIndex === toIndex || fromIndex <= 0 || toIndex <= 0 || fromIndex >= studioProject.frames.length || toIndex >= studioProject.frames.length) return state;
     const frames = [...studioProject.frames];
     const [moved] = frames.splice(fromIndex, 1);
     frames.splice(toIndex, 0, moved);

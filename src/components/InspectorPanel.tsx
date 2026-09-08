@@ -10,6 +10,8 @@ import { StylePanel } from '@/src/components/panels/StylePanel';
 import { TextPanel } from '@/src/components/panels/TextPanel';
 
 interface InspectorPanelProps {
+  activeTab: string;
+  onActiveTabChange: (value: string) => void;
   busy: boolean;
   onExportProject: () => void;
   onExportSelected: () => void;
@@ -23,7 +25,7 @@ interface InspectorPanelProps {
 export function InspectorPanel(props: InspectorPanelProps) {
   return (
     <aside className="inspector" aria-label="コントロールパネル">
-      <Tabs defaultValue="text" className="inspector-tabs">
+      <Tabs value={props.activeTab} onValueChange={props.onActiveTabChange} className="inspector-tabs">
         <TabsList variant="line" className="inspector-tablist">
           <TabsTrigger value="text" className="inspector-tab">
             <Type aria-hidden="true" />

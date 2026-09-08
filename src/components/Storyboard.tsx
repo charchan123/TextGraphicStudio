@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Check, ChevronDown, ChevronUp, Copy, GripVertical, LockKeyhole, Plus, Trash2, UnlockKeyhole } from 'lucide-react';
+import { Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Copy, GripVertical, LockKeyhole, Plus, Trash2, UnlockKeyhole } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -9,20 +9,31 @@ import {
   AlertDialogFooter, AlertDialogHeader, AlertDialogMedia, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { renderProjectThumbnailDataUrl } from '@/src/services/exportService';
+import { getFrameDisplayLabel } from '@/src/services/frameLabels';
+import { useClientHydrated } from '@/src/hooks/useClientHydrated';
 import { useEditorStore } from '@/src/store/editorStore';
 
-export function Storyboard() {
+export type StoryboardPlacement = 'left' | 'top' | 'hidden';
+
+export function Storyboard({
+  placement,
+  collapsed,
+  onCollapsedChange,
+}: {
+  placement: Exclude<StoryboardPlacement, 'hidden'>;
+  collapsed: boolean;
+  onCollapsedChange: (collapsed: boolean) => void;
+}) {
+  const clientHydrated = useClientHydrated();
   const studioProject = useEditorStore((state) => state.studioProject);
   const activeDocument = useEditorStore((state) => state.project);
   const setProjectName = useEditorStore((state) => state.setProjectName);
-  const renameFrame = useEditorStore((state) => state.renameFrame);
   const addFrame = useEditorStore((state) => state.addFrame);
   const duplicateFrame = useEditorStore((state) => state.duplicateFrame);
   const deleteFrame = useEditorStore((state) => state.deleteFrame);
   const reorderFrame = useEditorStore((state) => state.reorderFrame);
   const selectFrame = useEditorStore((state) => state.selectFrame);
   const setFrameCompletedLocked = useEditorStore((state) => state.setFrameCompletedLocked);
-  const [collapsed, setCollapsed] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [unlockTarget, setUnlockTarget] = useState<string | null>(null);
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
@@ -53,7 +64,7 @@ export function Storyboard() {
   }, [activeDocument, studioProject.activeFrameId, studioProject.frames]);
 
   return <>
-    <section className={`storyboard${collapsed ? ' is-collapsed' : ''}`} aria-label="Storyboard">
+    <section className={`storyboard${collapsed ? ' is-collapsed' : ''}`} data-placement={placement} aria-label="Storyboard">
       <header className="storyboard-header">
         <div className="storyboard-project-name">
           <label htmlFor="project-name">Project</label>
@@ -63,35 +74,53 @@ export function Storyboard() {
         </div>
         <span className="storyboard-count">{studioProject.frames.length}コマ</span>
         <Button type="button" variant="outline" size="sm" onClick={addFrame}><Plus aria-hidden="true" />コマ追加</Button>
-        <Button type="button" variant="ghost" size="icon-sm" aria-label={collapsed ? 'Storyboardを開く' : 'Storyboardを折りたたむ'} onClick={() => setCollapsed((value) => !value)}>
-          {collapsed ? <ChevronDown aria-hidden="true" /> : <ChevronUp aria-hidden="true" />}
+        <Button type="button" variant="ghost" size="icon-sm" className="storyboard-collapse" aria-label={collapsed ? 'Storyboardを開く' : 'Storyboardを折りたたむ'} onClick={() => onCollapsedChange(!collapsed)}>
+          {placement === 'left'
+            ? collapsed ? <ChevronRight aria-hidden="true" /> : <ChevronLeft aria-hidden="true" />
+            : collapsed ? <ChevronDown aria-hidden="true" /> : <ChevronUp aria-hidden="true" />}
         </Button>
       </header>
       {!collapsed && <div className="storyboard-list" data-frame-count={studioProject.frames.length}>
         {studioProject.frames.map((frame, index) => {
           const active = frame.frameId === studioProject.activeFrameId;
+          const displayLabel = getFrameDisplayLabel(index);
           return <article key={frame.frameId} className={`storyboard-frame${active ? ' is-active' : ''}${frame.completedLocked ? ' is-complete' : ''}`}
-            data-frame-id={frame.frameId}>
-            <button type="button" className="storyboard-select" onClick={() => selectFrame(frame.frameId)} aria-label={`${String(index).padStart(2, '0')} ${frame.name}を編集`}
-              draggable onDragStart={() => { dragIndex.current = index; }} onDragOver={(event) => event.preventDefault()}
-              onDrop={(event) => { event.preventDefault(); if (dragIndex.current !== null) reorderFrame(dragIndex.current, index); dragIndex.current = null; }}>
-              <span className="storyboard-number"><GripVertical aria-hidden="true" />{String(index).padStart(2, '0')}</span>
+            data-frame-id={clientHydrated ? frame.frameId : undefined}>
+            <button type="button" className="storyboard-select" onClick={() => selectFrame(frame.frameId)} aria-label={`${displayLabel}を編集`}
+              draggable={index > 0}
+              onDragStart={(event) => {
+                if (index === 0) {
+                  event.preventDefault();
+                  dragIndex.current = null;
+                  return;
+                }
+                dragIndex.current = index;
+              }}
+              onDragOver={(event) => { if (index > 0) event.preventDefault(); }}
+              onDrop={(event) => {
+                event.preventDefault();
+                const fromIndex = dragIndex.current;
+                dragIndex.current = null;
+                if (fromIndex !== null && fromIndex > 0 && index > 0) reorderFrame(fromIndex, index);
+              }}
+              onDragEnd={() => { dragIndex.current = null; }}>
+              <span className={`storyboard-number${index === 0 ? ' is-fixed' : ''}`}>
+                {index > 0 && <GripVertical aria-hidden="true" />}
+                <span className="storyboard-frame-label" title={displayLabel}>{displayLabel}</span>
+              </span>
               <span className="storyboard-thumb">
                 {thumbnails[frame.frameId] ? <span className="storyboard-thumb-image" aria-hidden="true" style={{ backgroundImage: `url(${thumbnails[frame.frameId]})` }} /> : <span>生成中</span>}
                 {frame.completedLocked && <span className="storyboard-complete"><Check aria-hidden="true" />完成</span>}
               </span>
             </button>
-            <input className="storyboard-frame-name" value={frame.name} maxLength={48} aria-label={`${String(index).padStart(2, '0')}のコマ名`}
-              onFocus={() => { if (!active) selectFrame(frame.frameId); }}
-              onChange={(event) => renameFrame(frame.frameId, event.currentTarget.value)} />
             <div className="storyboard-frame-actions">
-              <Button type="button" variant="ghost" size="icon-sm" aria-label={`${frame.name}を複製`} title="コマを複製" onClick={() => duplicateFrame(frame.frameId)}><Copy aria-hidden="true" /></Button>
-              <Button type="button" variant="ghost" size="icon-sm" aria-label={`${frame.name}の完成ロックを${frame.completedLocked ? '解除' : '有効化'}`} title={frame.completedLocked ? '完成ロック解除' : '完成ロック'}
+              <Button type="button" variant="ghost" size="icon-sm" aria-label={`${displayLabel}を複製`} title="コマを複製" onClick={() => duplicateFrame(frame.frameId)}><Copy aria-hidden="true" /></Button>
+              <Button type="button" variant="ghost" size="icon-sm" aria-label={`${displayLabel}の完成ロックを${frame.completedLocked ? '解除' : '有効化'}`} title={frame.completedLocked ? '完成ロック解除' : '完成ロック'}
                 onClick={() => frame.completedLocked ? setUnlockTarget(frame.frameId) : setFrameCompletedLocked(frame.frameId, true)}>
                 {frame.completedLocked ? <LockKeyhole aria-hidden="true" /> : <UnlockKeyhole aria-hidden="true" />}
               </Button>
               <Button type="button" variant="ghost" size="icon-sm" disabled={studioProject.frames.length <= 1 || frame.completedLocked}
-                aria-label={`${frame.name}を削除`} title="コマを削除" onClick={() => setDeleteTarget(frame.frameId)}><Trash2 aria-hidden="true" /></Button>
+                aria-label={`${displayLabel}を削除`} title="コマを削除" onClick={() => setDeleteTarget(frame.frameId)}><Trash2 aria-hidden="true" /></Button>
             </div>
           </article>;
         })}
