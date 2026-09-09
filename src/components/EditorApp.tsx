@@ -252,8 +252,18 @@ export function EditorApp() {
 
   const handleBackgroundFile = (file: File) => {
     void runTask(async () => {
+      const beforeLoad = useEditorStore.getState();
+      const targetFrameId = beforeLoad.studioProject.activeFrameId;
+      const lockedBeforeLoad = beforeLoad.studioProject.frames.find((frame) => frame.frameId === beforeLoad.studioProject.activeFrameId)?.completedLocked ?? false;
+      if (lockedBeforeLoad) throw new Error('完成ロック中のコマは背景画像を変更できません。');
       const image = await loadBackgroundFile(file);
-      setBackgroundImage(image);
+      const afterLoad = useEditorStore.getState();
+      if (afterLoad.studioProject.activeFrameId !== targetFrameId) {
+        throw new Error('対象のコマが切り替わったため、背景画像の読み込みを中止しました。');
+      }
+      const lockedAfterLoad = afterLoad.studioProject.frames.find((frame) => frame.frameId === afterLoad.studioProject.activeFrameId)?.completedLocked ?? false;
+      if (lockedAfterLoad) throw new Error('完成ロック中のコマは背景画像を変更できません。');
+      setBackgroundImage({ ...image, positionY: 0 });
     }, '背景画像を読み込みました。');
   };
 

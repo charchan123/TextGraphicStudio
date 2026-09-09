@@ -35,5 +35,6 @@ export const loadBackgroundFile = async (file: File): Promise<BackgroundImageDat
     naturalWidth: size.width,
     naturalHeight: size.height,
     fitMode: 'height-center',
+    positionY: 0,
   };
 };

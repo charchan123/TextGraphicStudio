@@ -201,7 +201,7 @@ export function FabricCanvas() {
         const scale = project.canvas.height / sourceHeight;
         image.set({
           left: project.canvas.width / 2,
-          top: project.canvas.height / 2,
+          top: project.canvas.height / 2 + (background.positionY ?? 0),
           originX: 'center',
           originY: 'center',
           scaleX: scale,

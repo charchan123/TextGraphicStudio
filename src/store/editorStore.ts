@@ -83,6 +83,7 @@ interface EditorState {
   toggleObjectFullLock: (id: string) => void;
   moveLayer: (id: string, direction: LayerDirection) => void;
   setBackgroundImage: (image: BackgroundImageData | null) => void;
+  setCanvasBackgroundPositionY: (positionY: number, recordHistory?: boolean) => void;
   setCanvasSize: (width: number, height: number, preset: CanvasPresetId) => void;
   toggleGuides: () => void;
   setSocialGuide: (guide: SocialGuide) => void;
@@ -391,9 +392,39 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       transactionBase: null,
     })),
 
+  setCanvasBackgroundPositionY: (positionY, recordHistory = true) =>
+    set((state) => {
+      if (activeFrameLocked(state)) return editBlocked(state);
+      const backgroundImage = state.project.backgroundImage;
+      if (!backgroundImage) return state;
+      const nextPositionY = Math.max(
+        -state.project.canvas.height,
+        Math.min(state.project.canvas.height, Number.isFinite(positionY) ? positionY : 0),
+      );
+      if ((backgroundImage.positionY ?? 0) === nextPositionY) return state;
+      const nextProject = stampProject({
+        ...state.project,
+        backgroundImage: { ...backgroundImage, positionY: nextPositionY },
+      });
+      if (!recordHistory) return { project: nextProject };
+      return {
+        project: nextProject,
+        past: pushHistory(state.past, state.transactionBase ?? state.project),
+        future: [],
+        transactionBase: null,
+      };
+    }),
+
   setCanvasSize: (width, height, preset) =>
     set((state) => activeFrameLocked(state) ? editBlocked(state) : ({
-      project: stampProject({ ...state.project, canvas: { ...state.project.canvas, width, height, preset } }),
+      project: stampProject({
+        ...state.project,
+        canvas: { ...state.project.canvas, width, height, preset },
+        backgroundImage: state.project.backgroundImage ? {
+          ...state.project.backgroundImage,
+          positionY: Math.max(-height, Math.min(height, state.project.backgroundImage.positionY ?? 0)),
+        } : null,
+      }),
       past: pushHistory(state.past, state.transactionBase ?? state.project),
       future: [],
       transactionBase: null,

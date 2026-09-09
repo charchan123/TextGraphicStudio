@@ -90,10 +90,20 @@ export const normalizeProjectDocument = (project: ProjectDocument): ProjectDocum
     palette?: ColorPalette;
     fontCatalog?: FontReference[];
   };
+  const backgroundPositionY = project.backgroundImage?.positionY;
   return {
     ...project,
     canvas: { ...project.canvas, socialGuide: project.canvas.socialGuide ? { ...project.canvas.socialGuide } : undefined },
-    backgroundImage: project.backgroundImage ? { ...project.backgroundImage } : null,
+    backgroundImage: project.backgroundImage ? {
+      ...project.backgroundImage,
+      positionY: Math.max(
+        -project.canvas.height,
+        Math.min(
+          project.canvas.height,
+          typeof backgroundPositionY === 'number' && Number.isFinite(backgroundPositionY) ? backgroundPositionY : 0,
+        ),
+      ),
+    } : null,
     palette: candidate.palette ? [...candidate.palette] : [...DEFAULT_COLOR_PALETTE],
     fontCatalog: cloneFontCatalog(candidate.fontCatalog ?? []),
     objects: project.objects.map(normalizeObject),

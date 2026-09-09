@@ -102,6 +102,33 @@ const renderGraphicDataUrl = async (object: GraphicTextObject): Promise<string> 
   return trimTransparentPixels(raw);
 };
 
+const applyProjectBackground = async (
+  surface: StaticCanvas,
+  project: ProjectDocument,
+  outputWidth: number,
+  outputHeight: number,
+  outputScale: number,
+): Promise<void> => {
+  if (project.backgroundImage) {
+    const image = await FabricImage.fromURL(project.backgroundImage.dataUrl, {}, {
+      selectable: false,
+      evented: false,
+    });
+    const scale = project.canvas.height / Math.max(1, image.height) * outputScale;
+    image.set({
+      left: outputWidth / 2,
+      top: outputHeight / 2 + (project.backgroundImage.positionY ?? 0) * outputScale,
+      originX: 'center',
+      originY: 'center',
+      scaleX: scale,
+      scaleY: scale,
+      selectable: false,
+      evented: false,
+    });
+    surface.backgroundImage = image;
+  }
+};
+
 const renderProjectDataUrl = async (project: ProjectDocument, outputWidth: number, outputHeight: number): Promise<string> => {
   const visibleObjects = project.objects.filter((object) => object.visible);
   await waitForGraphicFonts(visibleObjects);
@@ -114,24 +141,7 @@ const renderProjectDataUrl = async (project: ProjectDocument, outputWidth: numbe
     renderOnAddRemove: false,
   });
 
-  if (project.backgroundImage) {
-    const image = await FabricImage.fromURL(project.backgroundImage.dataUrl, {}, {
-      selectable: false,
-      evented: false,
-    });
-    const scale = project.canvas.height / Math.max(1, image.height) * outputScale;
-    image.set({
-      left: outputWidth / 2,
-      top: outputHeight / 2,
-      originX: 'center',
-      originY: 'center',
-      scaleX: scale,
-      scaleY: scale,
-      selectable: false,
-      evented: false,
-    });
-    surface.backgroundImage = image;
-  }
+  await applyProjectBackground(surface, project, outputWidth, outputHeight, outputScale);
 
   await prepareGraphicAssets([...visibleObjects].sort((left, right) => left.zIndex - right.zIndex), (object) => {
       const { group } = createFabricGraphicText(object);
@@ -171,6 +181,23 @@ export const renderProjectPngBlob = async (project: ProjectDocument): Promise<Bl
   return response.blob();
 };
 
+/** Renders only the Canvas background layer; uncovered Canvas pixels stay transparent. */
+export const renderProjectBackgroundPngBlob = async (project: ProjectDocument): Promise<Blob> => {
+  const surface = new StaticCanvas(document.createElement('canvas'), {
+    width: project.canvas.width,
+    height: project.canvas.height,
+    backgroundColor: 'rgba(0,0,0,0)',
+    enableRetinaScaling: false,
+    renderOnAddRemove: false,
+  });
+  await applyProjectBackground(surface, project, project.canvas.width, project.canvas.height, 1);
+  surface.renderAll();
+  const dataUrl = surface.toDataURL({ format: 'png', multiplier: 1, enableRetinaScaling: false });
+  void surface.dispose();
+  const response = await fetch(dataUrl);
+  return response.blob();
+};
+
 export const exportGraphicPng = async (object: GraphicTextObject): Promise<void> => {
   const dataUrl = await renderGraphicDataUrl(object);
   downloadDataUrl(dataUrl, `${sanitizeFileName(object.name)}.png`);
@@ -186,6 +213,13 @@ export const exportAllGraphicsPng = async (objects: GraphicTextObject[]): Promis
 };
 
 const frameFileName = (index: number): string => `${String(index).padStart(2, '0')}.png`;
+
+export const frameBackgroundFileName = (index: number): string =>
+  `${String(index).padStart(2, '0')}_background.png`;
+
+export const exportProjectBackgroundPng = async (project: ProjectDocument, frameIndex: number): Promise<void> => {
+  downloadBlob(await renderProjectBackgroundPngBlob(project), frameBackgroundFileName(frameIndex));
+};
 
 export const exportAllFramesPng = async (project: StudioProject): Promise<number> => {
   for (let index = 0; index < project.frames.length; index += 1) {

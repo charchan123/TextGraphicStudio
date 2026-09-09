@@ -221,6 +221,8 @@ export interface BackgroundImageData {
   naturalWidth: number;
   naturalHeight: number;
   fitMode: 'height-center';
+  /** Canvas-space vertical offset. Missing in older projects means 0. */
+  positionY?: number;
 }
 
 export interface ProjectDocument {

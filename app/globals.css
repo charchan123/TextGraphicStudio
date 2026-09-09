@@ -594,9 +594,11 @@ button, input, textarea, select { font: inherit; }
 .background-file-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; align-items: stretch; padding: 12px; }
 .background-file-summary { min-width: 0; padding-bottom: 9px; border-bottom: 1px solid #e3e7ed; }
 .background-file-card .background-file-summary strong { max-width: 100%; overflow-wrap: anywhere; white-space: normal; }
-.background-file-actions { display: flex; justify-content: flex-end; align-items: center; }
+.background-file-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 7px; }
 .background-remove-button { color: #a23f39; border-color: #e7c9c6; background: #fff; }
 .background-remove-button:hover { color: #8e2f29; border-color: #dbaaa5; background: #fff6f5; }
+.background-position-help { margin-top: 8px; color: #748096; font-size: 11px; line-height: 1.5; }
+.background-workflow-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; margin-top: 10px; }
 
 @media (max-width: 1500px) {
   .palette-editor-grid { grid-template-columns: repeat(2, 1fr); }
