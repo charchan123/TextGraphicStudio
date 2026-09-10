@@ -1,19 +1,28 @@
 'use client';
 
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { ColorField } from '@/src/components/controls/ColorField';
 import { SliderField } from '@/src/components/controls/SliderField';
 import { ToggleRow } from '@/src/components/controls/ToggleRow';
 import { useObjectEditor } from '@/src/hooks/useObjectEditor';
-import { applyPartialStrokeEdits, getStrokeLayers, strokeLayersInRange, STROKE_KEYS, updateStrokeLayer, type PartialStrokeEdits } from '@/src/services/strokes';
+import {
+  clearRangeStrokeLeaf,
+  getRangeStrokeOverrideState,
+  getStrokeLayers,
+  setRangeStrokeLeaf,
+  strokeLayersInRange,
+  STROKE_KEYS,
+  updateStrokeLayer,
+} from '@/src/services/strokes';
 import type { GraphicTextObject } from '@/src/types/editor';
 
-const noop = () => undefined;
 export function StrokeEditor({ selected }: { selected: GraphicTextObject }) {
   const editor = useObjectEditor(selected.id);
   const layers = getStrokeLayers(selected);
-  return <section className="panel-section stroke-section"><h2>フチ</h2>
-    <p className="panel-note">フチ1が最内周、フチ3が最外周。外側は内側がONのとき使えます。OFFにしても色・幅は残ります。</p>
+  return <section className="panel-section stroke-section">
+    <div className="section-heading"><div><h2>フチ</h2><p>フチ1が最内周、フチ3が最外周</p></div></div>
+    <p className="panel-note">外側は内側がONのとき使えます。OFFにしても色・幅は残ります。</p>
     {layers.map((layer, index) => <details key={index} className="stroke-editor" data-stroke-layer={index + 1}>
       <summary><span>フチ{index + 1}</span><span className="stroke-summary"><i style={{ background: layer.color }} />{layer.enabled ? `${layer.width} px` : 'OFF'}</span></summary>
       <div className="stroke-details">
@@ -25,50 +34,67 @@ export function StrokeEditor({ selected }: { selected: GraphicTextObject }) {
   </section>;
 }
 
-export function PartialStrokeEditor({ selected, start, end, edits, onChange }: { selected: GraphicTextObject; start: number; end: number; edits: PartialStrokeEdits; onChange: (edits: PartialStrokeEdits) => void }) {
-  const previewModel = { ...selected, partialStyles: applyPartialStrokeEdits(selected.partialStyles, start, end, edits) };
-  const ranges = strokeLayersInRange(previewModel, start, end);
-  const update = (key: typeof STROKE_KEYS[number], patch: Partial<PartialStrokeEdits[typeof key]>) => {
-    const index = STROKE_KEYS.indexOf(key);
-    const updated: PartialStrokeEdits = { ...edits, [key]: { ...edits[key], ...patch } };
-    const globalLayerIsOff = !getStrokeLayers(selected)[index].enabled;
-    if (patch.enabled === 'off' || (patch.enabled === 'inherit' && globalLayerIsOff)) {
-      for (let outer = index + 1; outer < STROKE_KEYS.length; outer += 1) {
-        const outerKey = STROKE_KEYS[outer];
-        updated[outerKey] = { ...updated[outerKey], enabled: 'off' };
-      }
-    }
-    onChange(updated);
+export function PartialStrokeEditor({ selected, start, end }: { selected: GraphicTextObject; start: number; end: number }) {
+  const editor = useObjectEditor(selected.id);
+  const ranges = strokeLayersInRange(selected, start, end);
+  const valid = start < end && end <= selected.text.length;
+  const update = (
+    key: typeof STROKE_KEYS[number],
+    property: 'enabled' | 'color' | 'width',
+    value: boolean | string | number,
+    preview = false,
+  ) => {
+    const apply = (object: GraphicTextObject): GraphicTextObject => ({
+      ...object,
+      partialStyles: setRangeStrokeLeaf(object.partialStyles, start, end, key, property, value as never),
+    });
+    if (preview) editor.preview(apply); else editor.commit(apply);
   };
-  return <div className="partial-stroke-section"><h3>部分フチ設定</h3><p className="panel-note">「変更しない」は現在の部分指定を保持し、「全体設定を使用」はその項目の部分指定だけを解除します。</p>
+  const clear = (key: typeof STROKE_KEYS[number], property: 'enabled' | 'color' | 'width') =>
+    editor.commit((object) => ({
+      ...object,
+      partialStyles: clearRangeStrokeLeaf(object.partialStyles, start, end, key, property),
+    }));
+  return <div className="partial-stroke-section"><h3>部分フチ設定</h3><p className="panel-note">各checkboxをOFFにすると、その項目だけ全体設定へ戻ります。</p>
     {STROKE_KEYS.map((key, index) => {
-      const edit = edits[key];
       const active = ranges.map((layers) => layers[index]);
       const effective = active.every((layer) => layer.enabled) ? 'ON' : active.every((layer) => !layer.enabled) ? 'OFF' : '混在';
       const definitelyOff = effective === 'OFF';
       const parentOn = index === 0 || ranges.every((layers) => layers[index - 1].enabled);
+      const enabledState = getRangeStrokeOverrideState(selected.partialStyles, start, end, key, 'enabled');
+      const colorState = getRangeStrokeOverrideState(selected.partialStyles, start, end, key, 'color');
+      const widthState = getRangeStrokeOverrideState(selected.partialStyles, start, end, key, 'width');
+      const fallback = active[0] ?? getStrokeLayers(selected)[index];
+      const option = (
+        property: 'enabled' | 'color' | 'width',
+        label: string,
+        state: { presence: 'none' | 'all' | 'mixed' },
+      ) => <div className="checkbox-row">
+        <Checkbox
+          id={`range-stroke-${key}-${property}`}
+          checked={state.presence === 'all'}
+          indeterminate={state.presence === 'mixed'}
+          disabled={!valid}
+          onCheckedChange={(checked) => {
+            if (!checked) clear(key, property);
+            else update(key, property, property === 'enabled' ? fallback.enabled : property === 'color' ? fallback.color : fallback.width);
+          }}
+        />
+        <label htmlFor={`range-stroke-${key}-${property}`}>{label}{state.presence === 'mixed' ? '（混在）' : ''}</label>
+      </div>;
       return <details key={key} className="stroke-editor partial-stroke-editor" data-partial-stroke-layer={key}><summary><span>フチ{key}</span><span className="stroke-summary">実効：{effective}</span></summary><div className="stroke-details">
-        <label className="field-label" htmlFor={`range-stroke-${key}-enabled`}>使用状態</label>
-        <NativeSelect id={`range-stroke-${key}-enabled`} aria-label={`フチ${key}の使用状態`} value={edit.enabled} onChange={(event) => update(key, { enabled: event.currentTarget.value as typeof edit.enabled })}>
-          <NativeSelectOption value="keep">変更しない</NativeSelectOption>
-          <NativeSelectOption value="inherit">全体設定を使用</NativeSelectOption>
-          <NativeSelectOption value="on" disabled={!parentOn}>この範囲でON</NativeSelectOption>
-          <NativeSelectOption value="off">この範囲でOFF</NativeSelectOption>
-        </NativeSelect>
-        <label className="field-label" htmlFor={`range-stroke-${key}-color-mode`}>色</label>
-        <NativeSelect id={`range-stroke-${key}-color-mode`} aria-label={`フチ${key}の色設定`} value={edit.color} disabled={definitelyOff} onChange={(event) => update(key, { color: event.currentTarget.value as typeof edit.color })}>
-          <NativeSelectOption value="keep">変更しない</NativeSelectOption>
-          <NativeSelectOption value="inherit">全体設定を使用</NativeSelectOption>
-          <NativeSelectOption value="change">この範囲で変更</NativeSelectOption>
-        </NativeSelect>
-        {edit.color === 'change' && <ColorField label={`範囲のフチ${key}の色`} value={edit.colorValue} disabled={definitelyOff} onBegin={noop} onPreview={(colorValue) => update(key, { colorValue })} onCommit={noop} />}
-        <label className="field-label" htmlFor={`range-stroke-${key}-width-mode`}>幅</label>
-        <NativeSelect id={`range-stroke-${key}-width-mode`} aria-label={`フチ${key}の幅設定`} value={edit.width} disabled={definitelyOff} onChange={(event) => update(key, { width: event.currentTarget.value as typeof edit.width })}>
-          <NativeSelectOption value="keep">変更しない</NativeSelectOption>
-          <NativeSelectOption value="inherit">全体設定を使用</NativeSelectOption>
-          <NativeSelectOption value="change">この範囲で変更</NativeSelectOption>
-        </NativeSelect>
-        {edit.width === 'change' && <SliderField label={`範囲のフチ${key}の幅`} value={edit.widthValue} min={0} max={40} unit="px" disabled={definitelyOff} onBegin={noop} onPreview={(widthValue) => update(key, { widthValue })} onCommit={noop} />}
+        {option('enabled', `フチ${key}の使用状態を部分適用`, enabledState)}
+        {enabledState.presence !== 'none' && <NativeSelect aria-label={`フチ${key}の使用状態`} value={String(enabledState.value ?? fallback.enabled)} disabled={!parentOn && !enabledState.value} onChange={(event) => update(key, 'enabled', event.currentTarget.value === 'true')}>
+          <NativeSelectOption value="true">ON</NativeSelectOption>
+          <NativeSelectOption value="false">OFF</NativeSelectOption>
+        </NativeSelect>}
+        {option('color', `フチ${key}の色を部分適用`, colorState)}
+        {colorState.presence !== 'none' && <ColorField label={`範囲のフチ${key}の色`} value={colorState.value ?? fallback.color} disabled={definitelyOff} onBegin={editor.begin} onPreview={(color) => update(key, 'color', color, true)} onCommit={editor.finish} />}
+        {option('width', `フチ${key}の幅を部分適用`, widthState)}
+        {widthState.presence !== 'none' && <>
+          {widthState.presence === 'mixed' && <p className="panel-note">現在値：混在</p>}
+          <SliderField label={`範囲のフチ${key}の幅`} value={widthState.value ?? fallback.width} min={0} max={40} unit="px" disabled={definitelyOff} onBegin={editor.begin} onPreview={(width) => update(key, 'width', width, true)} onCommit={editor.finish} />
+        </>}
       </div></details>;
     })}
   </div>;

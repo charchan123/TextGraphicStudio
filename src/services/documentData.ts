@@ -70,6 +70,7 @@ const normalizeObject = (object: GraphicTextObject): GraphicTextObject => ({
   ...cloneGraphicObject(object),
   typography: {
     ...object.typography,
+    fontWeightAdjust: object.typography.fontWeightAdjust ?? 0,
     fontStyle: object.typography.fontStyle ?? 'normal',
     slant: object.typography.slant ?? 0,
     glyphScaleX: object.typography.glyphScaleX ?? 1,
@@ -114,6 +115,7 @@ export const normalizeTemplate = (template: GraphicTextTemplateV1): GraphicTextT
   ...template,
   typography: {
     ...template.typography,
+    fontWeightAdjust: template.typography.fontWeightAdjust ?? 0,
     fontStyle: template.typography.fontStyle ?? 'normal',
     slant: template.typography.slant ?? 0,
     glyphScaleX: template.typography.glyphScaleX ?? 1,

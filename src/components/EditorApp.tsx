@@ -17,13 +17,13 @@ import {
 import { FabricCanvas } from '@/src/canvas/FabricCanvas';
 import { EditorToolbar } from '@/src/components/EditorToolbar';
 import { InspectorPanel } from '@/src/components/InspectorPanel';
-import { OutputPreviewDialog, type OutputPreview } from '@/src/components/OutputPreviewDialog';
+import { OutputPreviewDialog, type OutputPreview, type OutputPreviewFrame } from '@/src/components/OutputPreviewDialog';
 import { ProjectTextOverviewDialog } from '@/src/components/ProjectTextOverviewDialog';
 import { Storyboard, type StoryboardPlacement } from '@/src/components/Storyboard';
 import { useKeyboardShortcuts } from '@/src/hooks/useKeyboardShortcuts';
 import { useClientHydrated } from '@/src/hooks/useClientHydrated';
 import { useWebMcp } from '@/src/hooks/useWebMcp';
-import { exportAllFramesPng, exportAllFramesZip, exportAllGraphicsPng, exportGraphicPng, exportProjectPng, renderProjectPngBlob } from '@/src/services/exportService';
+import { exportAllFramesPng, exportAllFramesZip, exportAllGraphicsPng, exportGraphicPng, exportProjectPng, renderProjectPngBlob, renderProjectThumbnailDataUrl } from '@/src/services/exportService';
 import { loadBackgroundFile } from '@/src/services/imageService';
 import { getFontRestoreWarning } from '@/src/services/fontService';
 import {
@@ -39,6 +39,7 @@ import { loadPalettePreference, savePalettePreference } from '@/src/services/pal
 import { createTemplate, downloadTemplate, readTemplateFile } from '@/src/services/templateService';
 import { downloadProjectFile, readProjectFile } from '@/src/services/projectFileService';
 import { createStudioProject } from '@/src/services/studioProject';
+import { getOutputPreviewTargetIndex } from '@/src/services/outputPreviewNavigation';
 import { useEditorStore } from '@/src/store/editorStore';
 import type { StudioProject } from '@/src/types/editor';
 
@@ -66,8 +67,10 @@ export function EditorApp() {
   const [newDialogOpen, setNewDialogOpen] = useState(false);
   const [pendingProjectImport, setPendingProjectImport] = useState<StudioProject | null>(null);
   const [outputPreview, setOutputPreview] = useState<OutputPreview | null>(null);
+  const [outputPreviewFrames, setOutputPreviewFrames] = useState<OutputPreviewFrame[]>([]);
   const [outputPreviewNavigating, setOutputPreviewNavigating] = useState(false);
   const outputPreviewRequest = useRef(0);
+  const outputPreviewThumbnailRequest = useRef(0);
   const [textOverviewOpen, setTextOverviewOpen] = useState(false);
   const [storyboardPlacement, setStoryboardPlacement] = useState<StoryboardPlacement>(() => {
     const canvas = useEditorStore.getState().project.canvas;
@@ -100,14 +103,15 @@ export function EditorApp() {
   useEffect(() => {
     let cancelled = false;
     void Promise.all([
-      loadAutosave(),
       loadLastUsedTextDefaults().catch(() => null),
       loadQuickPartialPresets().catch(() => []),
     ])
-      .then(([savedProject, lastUsedTextDefaults, quickPartialPresets]) => {
+      .then(async ([lastUsedTextDefaults, quickPartialPresets]) => {
         if (cancelled) return;
         if (lastUsedTextDefaults) hydrateLastUsedTextDefaults(lastUsedTextDefaults);
         hydrateQuickPartialPresets(quickPartialPresets);
+        const savedProject = await loadAutosave(lastUsedTextDefaults ?? useEditorStore.getState().lastUsedTextDefaults);
+        if (cancelled) return;
         if (savedProject) setRestoreCandidate(savedProject);
         else {
           replaceProject({ ...useEditorStore.getState().project, palette: loadPalettePreference() });
@@ -274,9 +278,25 @@ export function EditorApp() {
   const handleOutputPreview = () => {
     const requestId = outputPreviewRequest.current + 1;
     outputPreviewRequest.current = requestId;
+    const thumbnailRequestId = outputPreviewThumbnailRequest.current + 1;
+    outputPreviewThumbnailRequest.current = thumbnailRequestId;
     setOutputPreview(null);
     void runTask(async () => {
       const snapshot = useEditorStore.getState().getStudioProjectSnapshot();
+      setOutputPreviewFrames(snapshot.frames.map((frame, frameIndex) => ({ frameId: frame.frameId, frameIndex })));
+      void Promise.all(snapshot.frames.map(async (candidate, frameIndex) => {
+        try {
+          return {
+            frameId: candidate.frameId,
+            frameIndex,
+            thumbnailUrl: await renderProjectThumbnailDataUrl(candidate.document, 96, 96),
+          };
+        } catch {
+          return { frameId: candidate.frameId, frameIndex };
+        }
+      })).then((frames) => {
+        if (thumbnailRequestId === outputPreviewThumbnailRequest.current) setOutputPreviewFrames(frames);
+      });
       const activeIndex = Math.max(0, snapshot.frames.findIndex((frame) => frame.frameId === snapshot.activeFrameId));
       const frame = snapshot.frames[activeIndex];
       const blob = await renderProjectPngBlob(frame.document);
@@ -298,17 +318,18 @@ export function EditorApp() {
 
   const closeOutputPreview = () => {
     outputPreviewRequest.current += 1;
+    outputPreviewThumbnailRequest.current += 1;
     setOutputPreviewNavigating(false);
     setOutputPreview(null);
+    setOutputPreviewFrames([]);
   };
 
-  const navigateOutputPreview = (offset: -1 | 1) => {
+  const goToOutputPreviewFrame = (targetIndex: number) => {
     if (!outputPreview || outputPreviewNavigating) return;
     const snapshot = useEditorStore.getState().getStudioProjectSnapshot();
     const currentIndex = snapshot.frames.findIndex((frame) => frame.frameId === outputPreview.frameId);
-    const targetIndex = currentIndex + offset;
     const targetFrame = snapshot.frames[targetIndex];
-    if (currentIndex < 0 || !targetFrame) return;
+    if (currentIndex < 0 || !targetFrame || targetFrame.frameId === outputPreview.frameId) return;
 
     const requestId = outputPreviewRequest.current + 1;
     outputPreviewRequest.current = requestId;
@@ -339,6 +360,12 @@ export function EditorApp() {
       });
   };
 
+  const navigateOutputPreview = (action: 'previous' | 'next') => {
+    if (!outputPreview) return;
+    const targetIndex = getOutputPreviewTargetIndex(outputPreview.frameIndex, outputPreview.frameCount, action);
+    goToOutputPreviewFrame(targetIndex);
+  };
+
   const handleProjectExport = () => {
     downloadProjectFile(useEditorStore.getState().getStudioProjectSnapshot());
     setNotice('プロジェクトを1ファイルへ書き出しました。', 'success');
@@ -346,7 +373,7 @@ export function EditorApp() {
 
   const handleProjectFile = (file: File) => {
     setBusy(true);
-    void readProjectFile(file)
+    void readProjectFile(file, useEditorStore.getState().lastUsedTextDefaults)
       .then(setPendingProjectImport)
       .catch((error) => setNotice(error instanceof Error ? error.message : 'プロジェクトを読み込めませんでした。', 'error'))
       .finally(() => setBusy(false));
@@ -429,7 +456,12 @@ export function EditorApp() {
 
   const discardSavedProject = () => {
     const fontCatalog = restoreCandidate?.frames.flatMap((frame) => frame.document.fontCatalog) ?? project.fontCatalog;
-    const nextProject = createStudioProject(loadPalettePreference(), fontCatalog);
+    const nextProject = createStudioProject(
+      loadPalettePreference(),
+      fontCatalog,
+      '名称未設定のプロジェクト',
+      useEditorStore.getState().lastUsedTextDefaults,
+    );
     const nextDocument = nextProject.frames[0].document;
     resetStoryboardLayout(nextDocument.canvas.width, nextDocument.canvas.height);
     replaceStudioProject(nextProject);
@@ -570,9 +602,11 @@ export function EditorApp() {
 
       {outputPreview && <OutputPreviewDialog
         preview={outputPreview}
+        frames={outputPreviewFrames}
         navigating={outputPreviewNavigating}
-        onPrevious={() => navigateOutputPreview(-1)}
-        onNext={() => navigateOutputPreview(1)}
+        onPrevious={() => navigateOutputPreview('previous')}
+        onNext={() => navigateOutputPreview('next')}
+        onSelectFrame={goToOutputPreviewFrame}
         onClose={closeOutputPreview}
       />}
       {textOverviewOpen && <ProjectTextOverviewDialog open onOpenChange={setTextOverviewOpen} onEditOnCanvas={editTextOnCanvas} />}

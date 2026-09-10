@@ -1,7 +1,10 @@
 'use client';
 
 import { useRef } from 'react';
+import { Popover } from '@base-ui/react/popover';
 import {
+  Check,
+  ChevronDown,
   Copy,
   EyeOff,
   FilePlus2,
@@ -73,7 +76,7 @@ export function EditorToolbar({
     <header className="editor-toolbar">
       <div className="brand-block">
         <div className="brand-mark" aria-hidden="true">T</div>
-        <div>
+        <div className="brand-copy">
           <p className="brand-name">Text Graphic Studio</p>
           <p className="brand-meta">ローカル編集 • {project.canvas.width} × {project.canvas.height}</p>
         </div>
@@ -126,23 +129,29 @@ export function EditorToolbar({
       </nav>
 
       <div className="toolbar-export">
-        <fieldset className="storyboard-layout-controls" aria-label="Storyboardの表示位置">
-          <ToolbarTooltip label="Storyboardを左に表示">
-            <Button type="button" variant={storyboardPlacement === 'left' ? 'default' : 'ghost'} size="icon-sm" aria-label="Storyboardを左に表示" aria-pressed={storyboardPlacement === 'left'} onClick={() => onStoryboardPlacementChange('left')}>
-              <PanelLeft aria-hidden="true" />
-            </Button>
-          </ToolbarTooltip>
-          <ToolbarTooltip label="Storyboardを上に表示">
-            <Button type="button" variant={storyboardPlacement === 'top' ? 'default' : 'ghost'} size="icon-sm" aria-label="Storyboardを上に表示" aria-pressed={storyboardPlacement === 'top'} onClick={() => onStoryboardPlacementChange('top')}>
-              <PanelTop aria-hidden="true" />
-            </Button>
-          </ToolbarTooltip>
-          <ToolbarTooltip label="Storyboardを非表示">
-            <Button type="button" variant={storyboardPlacement === 'hidden' ? 'default' : 'ghost'} size="icon-sm" aria-label="Storyboardを非表示" aria-pressed={storyboardPlacement === 'hidden'} onClick={() => onStoryboardPlacementChange('hidden')}>
-              <EyeOff aria-hidden="true" />
-            </Button>
-          </ToolbarTooltip>
-        </fieldset>
+        <Popover.Root>
+          <Popover.Trigger type="button" className="storyboard-menu-trigger" aria-label="Storyboardの表示位置" title="Storyboardの表示位置">
+            {storyboardPlacement === 'left' && <PanelLeft aria-hidden="true" />}
+            {storyboardPlacement === 'top' && <PanelTop aria-hidden="true" />}
+            {storyboardPlacement === 'hidden' && <EyeOff aria-hidden="true" />}
+            <span>Storyboard</span><ChevronDown className="storyboard-menu-chevron" aria-hidden="true" />
+          </Popover.Trigger>
+          <Popover.Portal>
+            <Popover.Positioner className="storyboard-menu-positioner" side="bottom" align="end" sideOffset={6} collisionPadding={10}>
+              <Popover.Popup className="storyboard-menu-popup" role="menu" aria-label="Storyboardの表示位置">
+                {([
+                  ['left', '左に表示', PanelLeft],
+                  ['top', '上に表示', PanelTop],
+                  ['hidden', '非表示', EyeOff],
+                ] as const).map(([placement, label, Icon]) => (
+                  <Popover.Close key={placement} type="button" role="menuitemradio" aria-checked={storyboardPlacement === placement} onClick={() => onStoryboardPlacementChange(placement)}>
+                    <Icon aria-hidden="true" /><span>{label}</span>{storyboardPlacement === placement && <Check className="storyboard-menu-check" aria-hidden="true" />}
+                  </Popover.Close>
+                ))}
+              </Popover.Popup>
+            </Popover.Positioner>
+          </Popover.Portal>
+        </Popover.Root>
         <CanvasSizeControl />
         <EditorActionButton action="projectTextOverview" iconOnly variant="outline" size="icon-lg" disabled={busy} onClick={onOpenTextOverview} />
         <EditorActionButton action="outputPreview" iconOnly variant="outline" size="icon-lg" disabled={busy} onClick={onPreview} />

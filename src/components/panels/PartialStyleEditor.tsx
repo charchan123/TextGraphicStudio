@@ -1,5 +1,6 @@
 'use client';
-import { useState } from 'react';
+
+import { useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
@@ -7,115 +8,241 @@ import { ColorField } from '@/src/components/controls/ColorField';
 import { SliderField } from '@/src/components/controls/SliderField';
 import { FontFamilySelect } from '@/src/components/FontPicker';
 import { useObjectEditor } from '@/src/hooks/useObjectEditor';
-import { applyPartialGlyphOffsetEdit, clearRangeStyles, type PartialGlyphOffsetAction } from '@/src/services/partialStyles';
-import type { GraphicTextObject, PartialTextStyle } from '@/src/types/editor';
+import {
+  clearRangeStyleLeaf,
+  clearRangeStyles,
+  getRangeOverrideState,
+  setRangeStyleLeaf,
+  shiftRangeNumericLeaf,
+  type PartialStyleLeaf,
+} from '@/src/services/partialStyles';
+import type { FillStyle, GraphicTextObject, PartialTextStyle } from '@/src/types/editor';
 import { PartialStrokeEditor } from '@/src/components/panels/StrokeEditor';
-import { applyPartialStrokeEdits, createPartialStrokeEdits, strokeLayersInRange } from '@/src/services/strokes';
+import { createPartialStrokeEdits, getRangeStrokeOverrideState, strokeLayersInRange, STROKE_KEYS } from '@/src/services/strokes';
 import { QuickPartialPresets } from '@/src/components/panels/QuickPartialPresets';
-import { applyQuickPartialOperation, createQuickPartialOperation, hasQuickPartialOperation } from '@/src/services/quickPartialPresets';
+import { createQuickPartialOperation } from '@/src/services/quickPartialPresets';
 
-const noop = () => undefined;
-export function PartialStyleEditor({ selected, start, end }: { selected: GraphicTextObject; start: number; end: number }) {
+const stateLabel = (presence: 'none' | 'all' | 'mixed'): string => presence === 'mixed' ? '（混在）' : '';
+
+export function PartialStyleEditor({
+  selected,
+  start,
+  end,
+  expanded,
+  onExpandedChange,
+}: {
+  selected: GraphicTextObject;
+  start: number;
+  end: number;
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
+}) {
   const editor = useObjectEditor(selected.id);
-  const [strokeEdits, setStrokeEdits] = useState(() => createPartialStrokeEdits(selected, start, end));
-  const [fillType, setFillType] = useState<'solid' | 'linear-gradient'>('solid');
-  const [color, setColor] = useState('#D20A11');
-  const [gradientEnd, setGradientEnd] = useState('#F08A16');
-  const [gradientAngle, setGradientAngle] = useState(90);
-  const [size, setSize] = useState(selected.typography.fontSize);
-  const [spacing, setSpacing] = useState(selected.typography.letterSpacing);
-  const [glyphWidth, setGlyphWidth] = useState((selected.typography.glyphScaleX ?? 1) * 100);
-  const [glyphHeight, setGlyphHeight] = useState((selected.typography.glyphScaleY ?? 1) * 100);
-  const [bold, setBold] = useState(true);
-  const [font, setFont] = useState({ family: selected.typography.fontFamily, refId: selected.typography.fontRefId });
-  const [glyphOffsetAction, setGlyphOffsetAction] = useState<PartialGlyphOffsetAction>('keep');
-  const [glyphOffsetY, setGlyphOffsetY] = useState(0);
-  const [enabled, setEnabled] = useState({ fill: true, size: false, spacing: false, glyphWidth: false, glyphHeight: false, bold: false, font: false });
   const valid = start < end && end <= selected.text.length;
-  const simulatedStyles = applyPartialStrokeEdits(selected.partialStyles, start, end, strokeEdits);
-  const validStrokes = strokeLayersInRange({ ...selected, partialStyles: simulatedStyles }, start, end)
-    .every((layers) => (!layers[1].enabled || layers[0].enabled) && (!layers[2].enabled || layers[1].enabled));
-  const option = (key: keyof typeof enabled, label: string) => <div className="checkbox-row"><Checkbox id={`range-${key}`} checked={enabled[key]} onCheckedChange={(checked) => setEnabled((value) => ({ ...value, [key]: Boolean(checked) }))} /><label htmlFor={`range-${key}`}>{label}</label></div>;
-  const style: Omit<PartialTextStyle, 'start' | 'end' | 'strokes'> = {};
-  if (enabled.fill) style.fill = fillType === 'solid'
-    ? { type: 'solid', color }
-    : { type: 'linear-gradient', angle: gradientAngle, stops: [{ offset: 0, color }, { offset: 1, color: gradientEnd }] };
-  if (enabled.size) style.fontSize = size;
-  if (enabled.spacing) style.letterSpacing = spacing;
-  if (enabled.glyphWidth) style.glyphScaleX = glyphWidth / 100;
-  if (enabled.glyphHeight) style.glyphScaleY = glyphHeight / 100;
-  if (enabled.bold) style.fontWeight = bold ? 900 : 400;
-  if (enabled.font) { style.fontFamily = font.family; style.fontRefId = font.refId; }
+  const selectionKey = selected.id + ':' + start + ':' + end;
+  const [mixedXState, setMixedXState] = useState({ key: selectionKey, value: 0 });
+  const mixedXDelta = mixedXState.key === selectionKey ? mixedXState.value : 0;
+  const xBaseStylesRef = useRef(selected.partialStyles);
+  const xStartValueRef = useRef(0);
+
+  const fill = getRangeOverrideState(selected.partialStyles, start, end, 'fill');
+  const size = getRangeOverrideState(selected.partialStyles, start, end, 'fontSize');
+  const spacing = getRangeOverrideState(selected.partialStyles, start, end, 'letterSpacing');
+  const glyphWidth = getRangeOverrideState(selected.partialStyles, start, end, 'glyphScaleX');
+  const glyphHeight = getRangeOverrideState(selected.partialStyles, start, end, 'glyphScaleY');
+  const bold = getRangeOverrideState(selected.partialStyles, start, end, 'fontWeight');
+  const weightAdjust = getRangeOverrideState(selected.partialStyles, start, end, 'fontWeightAdjust');
+  const font = getRangeOverrideState(selected.partialStyles, start, end, 'fontFamily');
+  const fontRef = getRangeOverrideState(selected.partialStyles, start, end, 'fontRefId');
+  const glyphOffsetX = getRangeOverrideState(selected.partialStyles, start, end, 'glyphOffsetX');
+  const glyphOffsetY = getRangeOverrideState(selected.partialStyles, start, end, 'glyphOffsetY');
+
+  const updateLeaf = (leaf: PartialStyleLeaf, value: unknown, preview = false) => {
+    const apply = (object: GraphicTextObject): GraphicTextObject => ({
+      ...object,
+      partialStyles: setRangeStyleLeaf(object.partialStyles, start, end, leaf, value as never),
+    });
+    if (preview) editor.preview(apply); else editor.commit(apply);
+  };
+  const clearLeaf = (leaf: PartialStyleLeaf) => editor.commit((object) => ({
+    ...object,
+    partialStyles: clearRangeStyleLeaf(object.partialStyles, start, end, leaf),
+  }));
+  const option = (leaf: PartialStyleLeaf, label: string, fallback: unknown) => {
+    const state = getRangeOverrideState(selected.partialStyles, start, end, leaf);
+    const id = 'range-' + leaf;
+    return <div className="checkbox-row">
+      <Checkbox
+        id={id}
+        checked={state.presence === 'all'}
+        indeterminate={state.presence === 'mixed'}
+        disabled={!valid || selected.fullyLocked}
+        onCheckedChange={(checked) => { if (checked) updateLeaf(leaf, state.value ?? fallback); else clearLeaf(leaf); }}
+      />
+      <label htmlFor={id}>{label}{stateLabel(state.presence)}</label>
+    </div>;
+  };
+
+  const style: Omit<PartialTextStyle, 'start' | 'end' | 'strokes' | 'glyphOffsetX' | 'glyphOffsetY'> = {};
+  if (fill.presence === 'all' && fill.value) style.fill = fill.value;
+  if (size.presence === 'all') style.fontSize = size.value;
+  if (spacing.presence === 'all') style.letterSpacing = spacing.value;
+  if (glyphWidth.presence === 'all') style.glyphScaleX = glyphWidth.value;
+  if (glyphHeight.presence === 'all') style.glyphScaleY = glyphHeight.value;
+  if (bold.presence === 'all') style.fontWeight = bold.value;
+  if (weightAdjust.presence === 'all') style.fontWeightAdjust = weightAdjust.value;
+  if (font.presence === 'all') {
+    style.fontFamily = font.value;
+    if (fontRef.presence === 'all') style.fontRefId = fontRef.value;
+  }
+  const strokeEdits = createPartialStrokeEdits(selected, start, end);
+  STROKE_KEYS.forEach((key) => {
+    const enabled = getRangeStrokeOverrideState(selected.partialStyles, start, end, key, 'enabled');
+    const color = getRangeStrokeOverrideState(selected.partialStyles, start, end, key, 'color');
+    const width = getRangeStrokeOverrideState(selected.partialStyles, start, end, key, 'width');
+    if (enabled.presence === 'all') strokeEdits[key].enabled = enabled.value ? 'on' : 'off';
+    if (color.presence === 'all') { strokeEdits[key].color = 'change'; strokeEdits[key].colorValue = color.value!; }
+    if (width.presence === 'all') { strokeEdits[key].width = 'change'; strokeEdits[key].widthValue = width.value!; }
+  });
   const currentOperation = createQuickPartialOperation(style, strokeEdits);
-  return <details className="partial-style-editor" open={valid}>
-    <summary>選択範囲にスタイルを適用</summary>
-    <p className="panel-note">上のテキスト欄で文字を選択してください。部分設定は全体設定より優先されます。</p>
+  const validStrokes = strokeLayersInRange(selected, start, end)
+    .every((layers) => (!layers[1].enabled || layers[0].enabled) && (!layers[2].enabled || layers[1].enabled));
+  const currentFill: FillStyle = fill.value ?? selected.fill;
+
+  const numeric = (
+    leaf: PartialStyleLeaf, label: string, state: typeof size, fallback: number,
+    min: number, max: number, unit: string, scale = 1,
+  ) => <>
+    {option(leaf, label + 'を部分適用', fallback)}
+    {state.presence !== 'none' && <>
+      {state.presence === 'mixed' && <p className="panel-note">現在値：混在</p>}
+      <SliderField
+        label={label}
+        value={Number(state.value ?? fallback) * scale}
+        min={min}
+        max={max}
+        unit={unit}
+        disabled={!valid || selected.fullyLocked}
+        onBegin={editor.begin}
+        onPreview={(value) => updateLeaf(leaf, value / scale, true)}
+        onCommit={editor.finish}
+      />
+    </>}
+  </>;
+
+  return <details
+    className="partial-style-editor"
+    open={expanded}
+    onToggle={(event) => onExpandedChange(event.currentTarget.open)}
+  >
+    <summary>選択範囲のスタイル</summary>
+    <p className="panel-note">文字範囲を選び、変更する項目だけONにします。値の操作はCanvasへ即時反映されます。</p>
     <QuickPartialPresets selected={selected} start={start} end={end} currentOperation={currentOperation} currentOperationValid={validStrokes} />
-    <p className="range-selection" aria-live="polite" data-range-start={start} data-range-end={end}>{valid ? `選択範囲：${start + 1}–${end}「${selected.text.slice(start, end)}」` : '範囲が選択されていません'}</p>
-    {option('fill', '文字色を部分適用')}
-    {enabled.fill && <div className="range-fill-controls">
+    <p className="range-selection" aria-live="polite" data-range-start={start} data-range-end={end}>
+      {valid ? '選択範囲：' + (start + 1) + '–' + end + '「' + selected.text.slice(start, end) + '」' : '範囲が選択されていません'}
+    </p>
+
+    {option('fill', '文字色を部分適用', selected.fill)}
+    {fill.presence !== 'none' && <div className="range-fill-controls">
+      {fill.presence === 'mixed' && <p className="panel-note">現在値：混在</p>}
       <label className="field-label" htmlFor="range-fill-type">範囲の塗り</label>
-      <NativeSelect id="range-fill-type" aria-label="範囲の塗り" value={fillType} onChange={(event) => setFillType(event.currentTarget.value as typeof fillType)}>
+      <NativeSelect id="range-fill-type" value={currentFill.type} onChange={(event) => {
+        const next = event.currentTarget.value === 'solid'
+          ? { type: 'solid' as const, color: currentFill.type === 'solid' ? currentFill.color : currentFill.stops[0]?.color ?? '#000000' }
+          : { type: 'linear-gradient' as const, angle: 90, stops: [{ offset: 0, color: '#FFF000' }, { offset: 1, color: '#FF8500' }] };
+        updateLeaf('fill', next);
+      }}>
         <NativeSelectOption value="solid">単色</NativeSelectOption>
         <NativeSelectOption value="linear-gradient">1文字ずつグラデーション</NativeSelectOption>
       </NativeSelect>
-      {fillType === 'solid' ? <ColorField label="範囲の文字色" value={color} onBegin={noop} onPreview={setColor} onCommit={noop} /> : <>
-        <ColorField label="範囲の開始色" value={color} onBegin={noop} onPreview={setColor} onCommit={noop} />
-        <ColorField label="範囲の終了色" value={gradientEnd} onBegin={noop} onPreview={setGradientEnd} onCommit={noop} />
-        <SliderField label="範囲のグラデーション角度" value={gradientAngle} min={-180} max={180} step={0.1} unit="°" onBegin={noop} onPreview={setGradientAngle} onCommit={noop} />
-        <Button type="button" variant="outline" className="range-reset" onClick={() => setFillType('solid')}>範囲のグラデーションを単色へ戻す</Button>
+      {currentFill.type === 'solid' ? <ColorField label="範囲の文字色" value={currentFill.color} onBegin={editor.begin} onPreview={(color) => updateLeaf('fill', { type: 'solid', color }, true)} onCommit={editor.finish} /> : <>
+        <ColorField label="範囲の開始色" value={currentFill.stops[0]?.color ?? '#000000'} onBegin={editor.begin} onPreview={(color) => updateLeaf('fill', { ...currentFill, stops: currentFill.stops.map((stop, index) => index === 0 ? { ...stop, color } : stop) }, true)} onCommit={editor.finish} />
+        <ColorField label="範囲の終了色" value={currentFill.stops.at(-1)?.color ?? '#FFFFFF'} onBegin={editor.begin} onPreview={(color) => updateLeaf('fill', { ...currentFill, stops: currentFill.stops.map((stop, index) => index === currentFill.stops.length - 1 ? { ...stop, color } : stop) }, true)} onCommit={editor.finish} />
+        <SliderField label="範囲のグラデーション角度" value={currentFill.angle} min={-180} max={180} step={0.1} unit="°" onBegin={editor.begin} onPreview={(angle) => updateLeaf('fill', { ...currentFill, angle }, true)} onCommit={editor.finish} />
       </>}
     </div>}
-    {option('size', '文字サイズを部分適用')}
-    {enabled.size && <SliderField label="範囲の文字サイズ" value={size} min={8} max={400} unit="px" onBegin={noop} onPreview={setSize} onCommit={noop} />}
-    {option('spacing', '文字間隔を部分適用')}
-    {enabled.spacing && <SliderField label="範囲の文字間隔" value={spacing} min={-40} max={160} unit="px" onBegin={noop} onPreview={setSpacing} onCommit={noop} />}
-    {option('glyphWidth', '文字幅を部分適用')}
-    {enabled.glyphWidth && <SliderField label="範囲の文字幅" value={glyphWidth} min={50} max={150} unit="%" onBegin={noop} onPreview={setGlyphWidth} onCommit={noop} />}
-    {option('glyphHeight', '文字高さを部分適用')}
-    {enabled.glyphHeight && <SliderField label="範囲の文字高さ" value={glyphHeight} min={50} max={150} unit="%" onBegin={noop} onPreview={setGlyphHeight} onCommit={noop} />}
-    {option('bold', '太字を部分適用')}
-    {enabled.bold && <Button variant={bold ? 'default' : 'outline'} aria-pressed={bold} onClick={() => setBold(!bold)}>範囲の太字 {bold ? 'ON' : 'OFF'}</Button>}
-    {option('font', 'フォントを部分適用')}
-    {enabled.font && <div className="range-font-control">
+
+    {numeric('fontSize', '文字サイズ', size, selected.typography.fontSize, 8, 400, 'px')}
+    {numeric('letterSpacing', '文字間隔', spacing, selected.typography.letterSpacing, -40, 160, 'px')}
+    {numeric('glyphScaleX', '文字幅', glyphWidth, selected.typography.glyphScaleX ?? 1, 50, 150, '%', 100)}
+    {numeric('glyphScaleY', '文字高さ', glyphHeight, selected.typography.glyphScaleY ?? 1, 50, 150, '%', 100)}
+    {numeric('fontWeightAdjust', '文字の太さ補正', weightAdjust, selected.typography.fontWeightAdjust ?? 0, 0, 16, 'px')}
+
+    {option('fontWeight', '太字を部分適用', selected.typography.fontWeight)}
+    {bold.presence !== 'none' && <Button type="button" variant={(bold.value ?? selected.typography.fontWeight) >= 700 ? 'default' : 'outline'} onClick={() => updateLeaf('fontWeight', (bold.value ?? selected.typography.fontWeight) >= 700 ? 400 : 900)}>
+      範囲の太字 {(bold.value ?? selected.typography.fontWeight) >= 700 ? 'ON' : 'OFF'}
+    </Button>}
+
+    <div className="checkbox-row">
+      <Checkbox
+        id="range-fontFamily"
+        checked={font.presence === 'all'}
+        indeterminate={font.presence === 'mixed'}
+        disabled={!valid || selected.fullyLocked}
+        onCheckedChange={(checked) => {
+          if (checked) {
+            editor.commit((object) => {
+              let partialStyles = setRangeStyleLeaf(object.partialStyles, start, end, 'fontFamily', font.value ?? selected.typography.fontFamily);
+              const refId = fontRef.value ?? selected.typography.fontRefId;
+              if (refId) partialStyles = setRangeStyleLeaf(partialStyles, start, end, 'fontRefId', refId);
+              return { ...object, partialStyles };
+            });
+          } else {
+            editor.commit((object) => ({
+              ...object,
+              partialStyles: clearRangeStyleLeaf(
+                clearRangeStyleLeaf(object.partialStyles, start, end, 'fontFamily'),
+                start,
+                end,
+                'fontRefId',
+              ),
+            }));
+          }
+        }}
+      />
+      <label htmlFor="range-fontFamily">フォントを部分適用{stateLabel(font.presence)}</label>
+    </div>
+    {font.presence !== 'none' && <div className="range-font-control">
+      {font.presence === 'mixed' && <p className="panel-note">現在値：混在</p>}
       <label className="field-label" htmlFor="range-font-family">範囲のフォント</label>
-      <FontFamilySelect id="range-font-family" ariaLabel="範囲のフォント" value={font.family} refId={font.refId} onChange={({ family, refId }) => setFont({ family, refId })} />
+      <FontFamilySelect id="range-font-family" value={font.value ?? selected.typography.fontFamily} refId={fontRef.value ?? selected.typography.fontRefId} onChange={({ family, refId }) => editor.commit((object) => {
+        let partialStyles = clearRangeStyleLeaf(object.partialStyles, start, end, 'fontFamily');
+        partialStyles = clearRangeStyleLeaf(partialStyles, start, end, 'fontRefId');
+        partialStyles = setRangeStyleLeaf(partialStyles, start, end, 'fontFamily', family);
+        if (refId) partialStyles = setRangeStyleLeaf(partialStyles, start, end, 'fontRefId', refId);
+        return { ...object, partialStyles };
+      })} />
     </div>}
-    <div className="range-glyph-offset-control">
-      <label className="field-label" htmlFor="range-glyph-offset-action">文字の上下位置</label>
-      <NativeSelect
-        id="range-glyph-offset-action"
-        aria-label="文字の上下位置"
-        value={glyphOffsetAction}
-        onChange={(event) => setGlyphOffsetAction(event.currentTarget.value as PartialGlyphOffsetAction)}
-      >
-        <NativeSelectOption value="keep">変更しない</NativeSelectOption>
-        <NativeSelectOption value="inherit">標準位置に戻す</NativeSelectOption>
-        <NativeSelectOption value="change">この範囲で変更</NativeSelectOption>
-      </NativeSelect>
-      {glyphOffsetAction === 'change' && <>
-        <SliderField label="文字の上下位置" value={glyphOffsetY} min={-100} max={100} unit="px" onBegin={noop} onPreview={setGlyphOffsetY} onCommit={noop} />
-        <p className="panel-note">＋で下、－で上へ移動します。横方向の文字送りは変わりません。</p>
-      </>}
-    </div>
-    <PartialStrokeEditor selected={selected} start={start} end={end} edits={strokeEdits} onChange={setStrokeEdits} />
-    {!validStrokes && <output className="panel-note">内側のフチをONにするか、外側の使用状態の指定を解除してください。</output>}
-    <div className="inline-actions">
-      <Button disabled={!valid || !validStrokes || (!hasQuickPartialOperation(currentOperation) && glyphOffsetAction === 'keep')} onClick={() => {
-        editor.commit((object) => {
-          const withExistingEdits = applyQuickPartialOperation(object, start, end, currentOperation);
-          return {
-            ...withExistingEdits,
-            partialStyles: applyPartialGlyphOffsetEdit(
-              withExistingEdits.partialStyles, start, end, glyphOffsetAction, glyphOffsetY,
-            ),
-          };
-        });
-        setStrokeEdits(createPartialStrokeEdits(selected, start, end));
-      }}>選択範囲に適用</Button>
-      <Button variant="outline" disabled={!valid || !selected.partialStyles.length} onClick={() => editor.commit((object) => ({ ...object, partialStyles: clearRangeStyles(object.partialStyles, start, end) }))}>選択範囲を解除</Button>
-    </div>
-    <Button className="range-reset" variant="ghost" disabled={!selected.partialStyles.length} onClick={() => editor.commit((object) => ({ ...object, partialStyles: [] }))}>部分スタイルをすべて解除</Button>
+
+    {option('glyphOffsetX', '文字の左右位置を部分適用', 0)}
+    {glyphOffsetX.presence !== 'none' && <>
+      {glyphOffsetX.presence === 'mixed' && <p className="panel-note">現在値：混在（入力値を全glyphへ差分加算）</p>}
+      <SliderField
+        label="文字の左右位置"
+        value={glyphOffsetX.presence === 'mixed' ? mixedXDelta : Number(glyphOffsetX.value ?? 0)}
+        min={-100}
+        max={100}
+        unit="px"
+        onBegin={() => { xBaseStylesRef.current = selected.partialStyles; xStartValueRef.current = mixedXDelta; editor.begin(); }}
+        onPreview={(value) => {
+          setMixedXState({ key: selectionKey, value });
+          if (glyphOffsetX.presence === 'mixed') {
+            const base = xBaseStylesRef.current;
+            const delta = value - xStartValueRef.current;
+            editor.preview((object) => ({ ...object, partialStyles: shiftRangeNumericLeaf(base, start, end, 'glyphOffsetX', delta, 0) }));
+          } else updateLeaf('glyphOffsetX', value, true);
+        }}
+        onCommit={() => { editor.finish(); setMixedXState({ key: selectionKey, value: 0 }); }}
+      />
+      <p className="panel-note">＋で右、－で左へ移動します。文字送りと改行位置は変わりません。</p>
+    </>}
+    {numeric('glyphOffsetY', '文字の上下位置', glyphOffsetY, 0, -100, 100, 'px')}
+
+    <PartialStrokeEditor selected={selected} start={start} end={end} />
+    {!validStrokes && <output className="panel-note">内側のフチをONにしてから外側のフチを使用してください。</output>}
+    <Button type="button" variant="outline" className="range-reset" disabled={!valid || !selected.partialStyles.length} onClick={() => editor.commit((object) => ({ ...object, partialStyles: clearRangeStyles(object.partialStyles, start, end) }))}>
+      部分スタイルをすべて解除
+    </Button>
     <p className="panel-note">適用済み：{selected.partialStyles.length}範囲。挿入・置換した文字は全体設定を使います。</p>
   </details>;
 }

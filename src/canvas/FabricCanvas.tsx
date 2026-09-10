@@ -21,6 +21,7 @@ export function FabricCanvas() {
   const canvasInstanceRef = useRef<Canvas | null>(null);
   const groupMapRef = useRef(new Map<string, Group>());
   const idMapRef = useRef(new WeakMap<object, string>());
+  const suppressSelectionClearRef = useRef(false);
   const [canvasReady, setCanvasReady] = useState(false);
   const [displaySize, setDisplaySize] = useState<DisplaySize>({ width: 960, height: 540 });
 
@@ -53,7 +54,9 @@ export function FabricCanvas() {
 
     instance.on('selection:created', syncSelection);
     instance.on('selection:updated', syncSelection);
-    instance.on('selection:cleared', () => useEditorStore.getState().selectObject(null));
+    instance.on('selection:cleared', () => {
+      if (!suppressSelectionClearRef.current) useEditorStore.getState().selectObject(null);
+    });
     instance.on('object:modified', ({ target }) => {
       if (!target) return;
       const id = idMapRef.current.get(target);
@@ -138,6 +141,7 @@ export function FabricCanvas() {
     if (cancelled) return;
     const desiredSelectedId = useEditorStore.getState().selectedId;
     const previousGroups = [...groupMapRef.current.values()];
+    suppressSelectionClearRef.current = true;
     canvas.discardActiveObject();
     if (previousGroups.length > 0) canvas.remove(...previousGroups);
     groupMapRef.current.clear();
@@ -159,6 +163,7 @@ export function FabricCanvas() {
     const activeGroup = desiredSelectedId ? groupMapRef.current.get(desiredSelectedId) : undefined;
     if (activeGroup) canvas.setActiveObject(activeGroup);
     else if (desiredSelectedId) useEditorStore.getState().selectObject(desiredSelectedId);
+    suppressSelectionClearRef.current = false;
     canvas.requestRenderAll();
     };
     void rebuild().catch((error: unknown) => {

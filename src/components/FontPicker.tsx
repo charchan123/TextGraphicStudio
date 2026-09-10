@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
-import { FilePlus2, MonitorDown, Search } from 'lucide-react';
+import { FilePlus2, MonitorDown, RefreshCw, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -71,7 +71,7 @@ export function FontPicker({ value, refId, onChange }: Omit<FontFamilySelectProp
     ).slice(0, 300);
   }, [available, query]);
 
-  const openLocalFonts = async () => {
+  const loadLocalFonts = async (openAfterLoad: boolean) => {
     if (!supportsLocalFontAccess()) {
       setNotice('このブラウザはPCフォント一覧に対応していません。フォントファイル追加をご利用ください。', 'warning');
       return;
@@ -80,12 +80,15 @@ export function FontPicker({ value, refId, onChange }: Omit<FontFamilySelectProp
     try {
       const fonts = await queryInstalledFonts();
       setAvailable(fonts);
-      setOpen(true);
+      if (openAfterLoad) setOpen(true);
       setNotice(`${fonts.length}件のPCフォントを取得しました。`, 'success');
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'PCフォント一覧を取得できませんでした。', 'warning');
     } finally { setBusy(false); }
   };
+
+  const openLocalFonts = () => loadLocalFonts(true);
+  const reloadLocalFonts = () => loadLocalFonts(false);
 
   const addFile = async (file: File) => {
     setBusy(true);
@@ -126,7 +129,13 @@ export function FontPicker({ value, refId, onChange }: Omit<FontFamilySelectProp
           <span className="sr-only">PCフォントを検索</span>
           <input type="search" value={query} aria-label="PCフォントを検索" placeholder="ヒラギノ、Morisawa、Noto、ゴシック…" onChange={(event) => setQuery(event.currentTarget.value)} />
         </label>
-        <p className="font-result-count">{filtered.length}件表示 / {available.length}件</p>
+        <div className="font-browser-status">
+          <p className="font-result-count">{filtered.length}件表示 / {available.length}件</p>
+          <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void reloadLocalFonts()}>
+            <RefreshCw className={busy ? 'animate-spin' : undefined} aria-hidden="true" />PCフォント一覧を再読み込み
+          </Button>
+        </div>
+        <p className="font-reload-note">新しくインストールしたフォントが表示されない場合はChromeを再起動してください</p>
         <ul className="font-result-list" aria-label="PCフォント一覧">
           {filtered.map((font) => <li key={font.id}><button type="button" className="font-result" onClick={() => {
             addFontReference(font);

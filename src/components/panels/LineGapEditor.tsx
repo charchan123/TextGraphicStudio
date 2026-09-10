@@ -22,7 +22,7 @@ export function LineGapEditor({ selected, start, end }: { selected: GraphicTextO
   return (
     <div className="line-gap-editor" data-line-gap-enabled={target.enabled}>
       <div className="line-gap-heading">
-        <div><h3>行間の個別調整</h3><p>全体行間へ、選択した行境界の補正を加えます。</p></div>
+        <div><h2>行間の個別調整</h2><p>全体行間へ、選択した行境界の補正を加えます。</p></div>
         <Button type="button" size="sm" variant="outline" disabled={disabled || value === 0} onClick={() => editor.commit(update(0))}>0に戻す</Button>
       </div>
       <p className="line-gap-target">

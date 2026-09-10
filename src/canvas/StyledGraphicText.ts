@@ -7,7 +7,9 @@ type RangeDeclaration = TextStyleDeclaration & {
   letterSpacing?: number;
   glyphScaleX?: number;
   glyphScaleY?: number;
+  deltaX?: number;
   deltaY?: number;
+  fontWeightAdjust?: number;
 };
 
 type LinearCoords = { x1: number; y1: number; x2: number; y2: number };
@@ -62,11 +64,16 @@ export class StyledGraphicText extends FabricText {
   }
   private baseGlyphScaleX = 1;
   private baseGlyphScaleY = 1;
+  private baseFontWeightAdjust = 0;
   private lineGapOffsets: number[] = [];
 
   setGlyphScales(scaleX: number, scaleY: number): void {
     this.baseGlyphScaleX = scaleX;
     this.baseGlyphScaleY = scaleY;
+  }
+
+  setFontWeightAdjust(value: number): void {
+    this.baseFontWeightAdjust = value;
   }
 
   setLineGapOffsets(offsets: readonly number[]): void {
@@ -83,6 +90,11 @@ export class StyledGraphicText extends FabricText {
       x: declaration.glyphScaleX ?? this.baseGlyphScaleX ?? 1,
       y: declaration.glyphScaleY ?? this.baseGlyphScaleY ?? 1,
     };
+  }
+
+  private weightAdjustAt(line: number, character: number): number {
+    const declaration = this._getStyleDeclaration(line, character) as RangeDeclaration;
+    return declaration.fontWeightAdjust ?? this.baseFontWeightAdjust ?? 0;
   }
 
   override _getGraphemeBox(...args: Parameters<FabricText['_getGraphemeBox']>) {
@@ -144,7 +156,9 @@ export class StyledGraphicText extends FabricText {
       return declaration.letterSpacing !== undefined
         || declaration.glyphScaleX !== undefined
         || declaration.glyphScaleY !== undefined
-        || declaration.deltaY !== undefined;
+        || declaration.deltaX !== undefined
+        || declaration.deltaY !== undefined
+        || declaration.fontWeightAdjust !== undefined;
     });
     const original = this.charSpacing;
     try {
@@ -171,6 +185,8 @@ export class StyledGraphicText extends FabricText {
     context.font = this._getFontDeclaration(complete);
     if (declaration.textBackgroundColor) this._removeShadow(context);
     if (declaration.deltaY) top += declaration.deltaY;
+    const drawLeft = left + (declaration.deltaX ?? 0);
+    const weightAdjust = this.weightAdjustAt(lineIndex, charIndex);
     const fill = complete.fill;
     const adjustedComplete = shouldFill && fill instanceof Gradient && fill.type === 'linear'
       ? {
@@ -178,21 +194,33 @@ export class StyledGraphicText extends FabricText {
           fill: compensateLinearGradient(
             fill as Gradient<'linear'>,
             {
-              x: left + this.width / 2 - fill.offsetX,
+              x: drawLeft + this.width / 2 - fill.offsetX,
               y: top + this.height / 2 - fill.offsetY,
             },
             scale,
           ),
         }
       : complete;
+    const paintStyle = shouldStroke && weightAdjust > 0
+      ? { ...complete, strokeWidth: Number(complete.strokeWidth ?? 0) + weightAdjust * 2 }
+      : adjustedComplete;
     const offsets = shouldFill
       ? this._setFillStyles(context, adjustedComplete)
-      : this._setStrokeStyles(context, complete);
-    const x = left - offsets.offsetX;
+      : this._setStrokeStyles(context, paintStyle);
+    const x = drawLeft - offsets.offsetX;
     const y = top - offsets.offsetY;
     context.translate(x, y);
     context.scale(scale.x, scale.y);
     context.translate(-x, -y);
+    if (shouldFill && weightAdjust > 0) {
+      context.save();
+      context.strokeStyle = context.fillStyle;
+      context.lineWidth = weightAdjust * 2;
+      context.lineJoin = 'round';
+      context.miterLimit = 2;
+      context.strokeText(character, x, y);
+      context.restore();
+    }
     context[method](character, x, y);
     context.restore();
   }
@@ -204,23 +232,37 @@ export class StyledGraphicText extends FabricText {
       const baseHeight = this.rawLineHeight(lineIndex);
       const width = this.measureLine(lineIndex).width;
       if (line.length > 0 && width > 0) {
-        let minTop = 0;
-        let maxBottom = baseHeight;
+        let minTop = Number.POSITIVE_INFINITY;
+        let maxBottom = Number.NEGATIVE_INFINITY;
+        let minLeft = Number.POSITIVE_INFINITY;
+        let maxRight = Number.NEGATIVE_INFINITY;
         for (let character = 0; character < line.length; character += 1) {
           const complete = this.getCompleteStyleDeclaration(lineIndex, character);
           const height = Number(complete.fontSize ?? this.fontSize) * this._fontSizeMult
             * this.glyphScaleAt(lineIndex, character).y;
           const deltaY = Number((this._getStyleDeclaration(lineIndex, character) as RangeDeclaration).deltaY ?? 0);
+          const deltaX = Number((this._getStyleDeclaration(lineIndex, character) as RangeDeclaration).deltaX ?? 0);
+          const weightAdjust = this.weightAdjustAt(lineIndex, character);
+          const box = this.__charBounds[lineIndex]?.[character];
+          const spacing = this.spacingAt(lineIndex, character);
           const glyphTop = baseHeight * (1 - this._fontSizeFraction)
             - height * (1 - this._fontSizeFraction) + deltaY;
-          minTop = Math.min(minTop, glyphTop);
-          maxBottom = Math.max(maxBottom, glyphTop + height);
+          minTop = Math.min(minTop, glyphTop - weightAdjust);
+          maxBottom = Math.max(maxBottom, glyphTop + height + weightAdjust);
+          if (box) {
+            minLeft = Math.min(minLeft, box.left + deltaX - weightAdjust);
+            maxRight = Math.max(maxRight, box.left + Math.max(1, box.width - spacing) + deltaX + weightAdjust);
+          }
+        }
+        if (!Number.isFinite(minLeft) || !Number.isFinite(maxRight)) {
+          minLeft = 0;
+          maxRight = width;
         }
         const height = maxBottom - minTop;
         layouts.push({
-          width,
+          width: Math.max(1, maxRight - minLeft),
           height,
-          centerX: -this.width / 2 + this._getLineLeftOffset(lineIndex) + width / 2,
+          centerX: -this.width / 2 + this._getLineLeftOffset(lineIndex) + (minLeft + maxRight) / 2,
           centerY: top + minTop + height / 2,
         });
       }
@@ -248,11 +290,13 @@ export class StyledGraphicText extends FabricText {
           );
           const baseline = top + this.rawLineHeight(lineIndex) * (1 - this._fontSizeFraction);
           const deltaY = Number((this._getStyleDeclaration(lineIndex, charIndex) as RangeDeclaration).deltaY ?? 0);
+          const deltaX = Number((this._getStyleDeclaration(lineIndex, charIndex) as RangeDeclaration).deltaX ?? 0);
+          const weightAdjust = this.weightAdjustAt(lineIndex, charIndex);
           return {
-            left: lineLeft + box.left,
-            top: baseline - height * (1 - this._fontSizeFraction) + deltaY,
-            width: Math.max(1, box.width - spacing),
-            height,
+            left: lineLeft + box.left + deltaX - weightAdjust,
+            top: baseline - height * (1 - this._fontSizeFraction) + deltaY - weightAdjust,
+            width: Math.max(1, box.width - spacing) + weightAdjust * 2,
+            height: height + weightAdjust * 2,
           };
         }
         index += 1;
@@ -279,6 +323,7 @@ export const createTextFill = (fill: FillStyle, width: number, height: number, l
 export const applyTextRanges = (text: StyledGraphicText, model: GraphicTextObject): void => {
   text.setGlyphScales(model.typography.glyphScaleX ?? 1, model.typography.glyphScaleY ?? 1);
   text.setLineGapOffsets(model.lineGapOffsets ?? []);
+  text.setFontWeightAdjust(model.typography.fontWeightAdjust ?? 0);
   const graphemes = util.string.graphemeSplit(model.text.replace(/\r\n?/g, '\n'));
   const fills = new Map<number, FillStyle>();
   let offset = 0;
@@ -299,12 +344,14 @@ export const applyTextRanges = (text: StyledGraphicText, model: GraphicTextObjec
       if (range.fontSize !== undefined) declaration.fontSize = range.fontSize;
       else if (range.fontScale !== undefined) declaration.fontSize = model.typography.fontSize * range.fontScale;
       if (range.fontWeight !== undefined) declaration.fontWeight = range.fontWeight;
+      if (range.fontWeightAdjust !== undefined) declaration.fontWeightAdjust = range.fontWeightAdjust;
       if (range.fontFamily !== undefined) declaration.fontFamily = resolveFontStack(range.fontFamily);
       if (range.fontStyle !== undefined) declaration.fontStyle = range.fontStyle;
       if (range.letterSpacing !== undefined) declaration.letterSpacing = range.letterSpacing;
       if (range.glyphScaleX !== undefined) declaration.glyphScaleX = range.glyphScaleX;
       if (range.glyphScaleY !== undefined) declaration.glyphScaleY = range.glyphScaleY;
       if (range.glyphOffsetY !== undefined) declaration.deltaY = range.glyphOffsetY;
+      if (range.glyphOffsetX !== undefined) declaration.deltaX = range.glyphOffsetX;
       if (range.fill) fills.set(index, range.fill);
       text.setSelectionStyles(declaration, index, index + 1);
     }

@@ -101,7 +101,11 @@ export function SliderField({
             }}
             onChange={(event) => {
               const nextDraft = event.currentTarget.value;
-              if (numericDraftPattern.test(nextDraft)) updateDraft(nextDraft);
+              if (numericDraftPattern.test(nextDraft)) {
+                updateDraft(nextDraft);
+                const parsed = Number(nextDraft);
+                if (nextDraft !== '' && nextDraft !== '-' && Number.isFinite(parsed)) onPreview(clamp(parsed));
+              }
             }}
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
@@ -111,6 +115,7 @@ export function SliderField({
                 event.preventDefault();
                 cancelNextBlurRef.current = true;
                 updateDraft(formatValue(editStartValueRef.current));
+                onPreview(editStartValueRef.current);
                 event.currentTarget.blur();
               }
             }}

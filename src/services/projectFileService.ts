@@ -3,7 +3,7 @@ import { normalizeProjectDocument } from '@/src/services/documentData';
 import { isProjectDocument, isStudioProject } from '@/src/services/persistence';
 import { prepareGraphicAssets } from '@/src/services/textBackgroundAssets';
 import { normalizeStudioProject, wrapLegacyDocument } from '@/src/services/studioProject';
-import type { ProjectDocument, StudioProject } from '@/src/types/editor';
+import type { ProjectDocument, StudioProject, TextDesignDefaults } from '@/src/types/editor';
 
 const PROJECT_KIND = 'text-graphic-studio-project-package';
 const PROJECT_VERSION = 2;
@@ -53,7 +53,7 @@ export const downloadProjectFile = (project: StudioProject): void => {
   );
 };
 
-export const readProjectFile = async (file: File): Promise<StudioProject> => {
+export const readProjectFile = async (file: File, fallbackDefaults?: TextDesignDefaults): Promise<StudioProject> => {
   if (file.size <= 0 || file.size > MAX_PROJECT_BYTES) throw new Error('プロジェクトファイルは128MB以内にしてください。');
   let parsed: unknown;
   try {
@@ -66,9 +66,9 @@ export const readProjectFile = async (file: File): Promise<StudioProject> => {
   }
   let project: StudioProject;
   if (parsed.version === PROJECT_VERSION && isStudioProject(parsed.project)) {
-    project = normalizeStudioProject(parsed.project);
+    project = normalizeStudioProject(parsed.project, fallbackDefaults);
   } else if (parsed.version === 1 && isProjectDocument(parsed.document)) {
-    project = wrapLegacyDocument(normalizeProjectDocument(parsed.document));
+    project = wrapLegacyDocument(normalizeProjectDocument(parsed.document), undefined, fallbackDefaults);
   } else {
     throw new Error('対応しているText Graphic Studioプロジェクト形式ではありません。');
   }

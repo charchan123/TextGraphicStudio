@@ -71,6 +71,8 @@ const createTextLayer = (
   // A range outline can split strokeText runs. Use the same glyph runs in fill and all outlines.
   text.forceCharacterRendering = model.partialStyles.some((range) => range.strokes && Object.keys(range.strokes).length > 0)
     || model.partialStyles.some((range) => range.glyphOffsetY !== undefined)
+    || model.partialStyles.some((range) => range.glyphOffsetX !== undefined || range.fontWeightAdjust !== undefined)
+    || (model.typography.fontWeightAdjust ?? 0) > 0
     || Object.values(model.characterScale).some((scale) => Math.abs(scale - 1) > 0.0001);
   applyTextRanges(text, model);
   return text;
@@ -78,7 +80,14 @@ const createTextLayer = (
 
 export const createFabricGraphicText = (model: GraphicTextObject): RenderedGraphicText => {
   const children: FabricObject[] = [];
-  const glyphOffsetPadding = Math.max(0, ...model.partialStyles.map((range) => Math.abs(range.glyphOffsetY ?? 0)));
+  const glyphOffsetPadding = Math.max(
+    model.typography.fontWeightAdjust ?? 0,
+    ...model.partialStyles.map((range) => Math.max(
+      Math.abs(range.glyphOffsetX ?? 0),
+      Math.abs(range.glyphOffsetY ?? 0),
+      range.fontWeightAdjust ?? model.typography.fontWeightAdjust ?? 0,
+    )),
+  );
   const shadow = model.shadow.enabled
     ? new Shadow({
         color: toRgba(model.shadow.color, model.shadow.opacity),

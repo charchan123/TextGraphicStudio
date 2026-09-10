@@ -45,6 +45,8 @@ export interface TypographyStyle {
   fontRefId?: string;
   fontSize: number;
   fontWeight: 400 | 700 | 900;
+  /** Synthetic glyph-body expansion in pixels. Independent from font weight and outline layers. */
+  fontWeightAdjust?: number;
   fontStyle?: FontStyleMode;
   /** Visual slant in degrees. Kept separate from object rotation. */
   slant?: number;
@@ -143,6 +145,8 @@ export interface PartialTextStyle {
   fontSize?: number;
   letterSpacing?: number;
   fontWeight?: 400 | 700 | 900;
+  /** Range override for synthetic glyph-body expansion. */
+  fontWeightAdjust?: number;
   fontFamily?: string;
   fontRefId?: string;
   fontStyle?: 'normal' | 'italic';
@@ -150,6 +154,8 @@ export interface PartialTextStyle {
   glyphScaleY?: number;
   /** Per-range visual baseline correction in pixels. Positive moves glyphs down. */
   glyphOffsetY?: number;
+  /** Per-range visual horizontal correction. This never changes layout advance. */
+  glyphOffsetX?: number;
   strokes?: PartialStrokeLayers;
 }
 
@@ -254,6 +260,8 @@ export interface StudioProject {
   projectName: string;
   frames: ProjectFrame[];
   activeFrameId: string;
+  /** Whole-text appearance used only when creating future TextObjects. */
+  projectTextDefaults?: ProjectTextDefaults;
   createdAt: string;
   updatedAt: string;
 }
@@ -285,6 +293,20 @@ export type TextDesignDefaults = Omit<
   GraphicTextObject,
   'id' | 'name' | 'text' | 'position' | 'zIndex' | 'lineGapOffsets'
 >;
+
+/** Project-scoped appearance defaults. Content, geometry, locks and range/line corrections are intentionally excluded. */
+export type ProjectTextDefaults = Pick<
+  GraphicTextObject,
+  'typography' | 'characterScale' | 'fill' | 'stroke' | 'outerStroke' | 'strokes' | 'shadow' | 'background'
+>;
+
+export interface TextDefaultsFileV1 {
+  type: 'text-graphic-studio-text-defaults';
+  version: 1;
+  defaults: ProjectTextDefaults;
+  /** Referenced font metadata only. Font binaries are never embedded. */
+  fontReferences?: FontReference[];
+}
 
 export type NoticeKind = 'success' | 'warning' | 'error' | 'info';
 

@@ -1,5 +1,5 @@
 import { isEmbeddedBackgroundImage } from '@/src/services/textBackgroundAssets';
-import type { ColorPalette, FillStyle, FontReference, PartialTextStyle, RoughBandStyle } from '@/src/types/editor';
+import type { ColorPalette, FillStyle, FontReference, PartialTextStyle, ProjectTextDefaults, RoughBandStyle } from '@/src/types/editor';
 
 export const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
 export const bounded = (value: unknown, min: number, max: number): value is number => typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
@@ -45,12 +45,14 @@ export const isPartialTextStyle = (value: unknown): value is PartialTextStyle =>
   && (value.fontSize === undefined || bounded(value.fontSize, 8, 400))
   && (value.letterSpacing === undefined || bounded(value.letterSpacing, -40, 160))
   && (value.fontWeight === undefined || value.fontWeight === 400 || value.fontWeight === 700 || value.fontWeight === 900)
+  && (value.fontWeightAdjust === undefined || bounded(value.fontWeightAdjust, 0, 16))
   && (value.fontFamily === undefined || isSafeFontText(value.fontFamily))
   && (value.fontRefId === undefined || isSafeFontText(value.fontRefId))
   && (value.fontStyle === undefined || value.fontStyle === 'normal' || value.fontStyle === 'italic')
   && (value.glyphScaleX === undefined || bounded(value.glyphScaleX, 0.5, 1.5))
   && (value.glyphScaleY === undefined || bounded(value.glyphScaleY, 0.5, 1.5))
   && (value.glyphOffsetY === undefined || bounded(value.glyphOffsetY, -100, 100))
+  && (value.glyphOffsetX === undefined || bounded(value.glyphOffsetX, -100, 100))
   && (value.strokes === undefined || isPartialStrokes(value.strokes));
 
 export const isTextBackground = (value: unknown): value is RoughBandStyle => isRecord(value)
@@ -67,3 +69,34 @@ export const isTextBackground = (value: unknown): value is RoughBandStyle => isR
     && bounded(value.followSettings.seamOverlap, 0, 16)
     && bounded(value.followSettings.lineOverlap, 0, 80)))
   && (value.type !== 'uploadedImage' || !value.enabled || isEmbeddedBackgroundImage(value.image));
+
+const isStrokeStyle = (value: unknown): boolean => isRecord(value)
+  && typeof value.enabled === 'boolean' && color(value.color) && bounded(value.width, 0, 40);
+
+export const isProjectTextDefaults = (value: unknown): value is ProjectTextDefaults => {
+  if (!isRecord(value) || !isRecord(value.typography) || !isRecord(value.characterScale) || !isRecord(value.shadow)) return false;
+  const typography = value.typography;
+  const scales = value.characterScale;
+  const shadow = value.shadow;
+  return isSafeFontText(typography.fontFamily)
+    && (typography.fontRefId === undefined || isSafeFontText(typography.fontRefId))
+    && bounded(typography.fontSize, 8, 400)
+    && (typography.fontWeight === 400 || typography.fontWeight === 700 || typography.fontWeight === 900)
+    && (typography.fontWeightAdjust === undefined || bounded(typography.fontWeightAdjust, 0, 16))
+    && (typography.fontStyle === undefined || typography.fontStyle === 'normal' || typography.fontStyle === 'italic' || typography.fontStyle === 'slant')
+    && (typography.slant === undefined || bounded(typography.slant, -25, 25))
+    && (typography.glyphScaleX === undefined || bounded(typography.glyphScaleX, 0.5, 1.5))
+    && (typography.glyphScaleY === undefined || bounded(typography.glyphScaleY, 0.5, 1.5))
+    && bounded(typography.letterSpacing, -40, 160)
+    && bounded(typography.lineHeight, 0.5, 3)
+    && ['left', 'center', 'right'].includes(String(typography.textAlign))
+    && ['kanji', 'hiragana', 'katakana', 'latin', 'number', 'symbol'].every((key) => bounded(scales[key], 0.5, 1.5))
+    && isFillStyle(value.fill)
+    && isStrokeStyle(value.stroke)
+    && isStrokeStyle(value.outerStroke)
+    && (value.strokes === undefined || isStrokeLayers(value.strokes))
+    && typeof shadow.enabled === 'boolean' && color(shadow.color)
+    && bounded(shadow.opacity, 0, 1) && bounded(shadow.blur, 0, 50)
+    && bounded(shadow.offsetX, -100, 100) && bounded(shadow.offsetY, -100, 100)
+    && isTextBackground(value.background);
+};

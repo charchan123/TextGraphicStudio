@@ -3,7 +3,7 @@ import { normalizeProjectDocument, normalizeTextBackground } from '@/src/service
 import { cloneQuickPartialPreset, hasQuickPartialOperation, MAX_QUICK_PARTIAL_PRESETS } from '@/src/services/quickPartialPresets';
 import { toTextDesignDefaults } from '@/src/services/textDefaults';
 import { isStrokeLayers } from '@/src/services/styleValidation';
-import { bounded, isColorPalette, isFillStyle, isFontReference, isPartialTextStyle, isSafeFontText, isTextBackground } from '@/src/services/styleValidation';
+import { bounded, isColorPalette, isFillStyle, isFontReference, isPartialTextStyle, isProjectTextDefaults, isSafeFontText, isTextBackground } from '@/src/services/styleValidation';
 import { normalizeStudioProject, wrapLegacyDocument } from '@/src/services/studioProject';
 
 const DATABASE_NAME = 'text-graphic-studio';
@@ -69,7 +69,8 @@ export const isStudioProject = (value: unknown): value is StudioProject => {
       && typeof frame.updatedAt === 'string'
       && isProjectDocument(frame.document);
   });
-  return validFrames && frameIds.has(value.activeFrameId);
+  return validFrames && frameIds.has(value.activeFrameId)
+    && (value.projectTextDefaults === undefined || isProjectTextDefaults(value.projectTextDefaults));
 };
 
 const openDatabase = (): Promise<IDBDatabase> =>
@@ -106,10 +107,10 @@ export const saveAutosave = async (project: StudioProject): Promise<void> => {
   await runRequest('readwrite', (store) => store.put(project, AUTOSAVE_KEY));
 };
 
-export const loadAutosave = async (): Promise<StudioProject | null> => {
+export const loadAutosave = async (fallbackDefaults?: TextDesignDefaults): Promise<StudioProject | null> => {
   const value = await runRequest<unknown>('readonly', (store) => store.get(AUTOSAVE_KEY));
-  if (isStudioProject(value)) return normalizeStudioProject(value);
-  return isProjectDocument(value) ? wrapLegacyDocument(normalizeProjectDocument(value)) : null;
+  if (isStudioProject(value)) return normalizeStudioProject(value, fallbackDefaults);
+  return isProjectDocument(value) ? wrapLegacyDocument(normalizeProjectDocument(value), undefined, fallbackDefaults) : null;
 };
 
 export const clearAutosave = async (): Promise<void> => {
@@ -139,7 +140,7 @@ export const loadLastUsedTextDefaults = async (): Promise<TextDesignDefaults | n
 };
 
 const PARTIAL_STYLE_OPERATION_KEYS = new Set([
-  'fill', 'fontScale', 'fontSize', 'letterSpacing', 'fontWeight', 'fontFamily', 'fontRefId', 'fontStyle', 'glyphScaleX', 'glyphScaleY',
+  'fill', 'fontScale', 'fontSize', 'letterSpacing', 'fontWeight', 'fontWeightAdjust', 'fontFamily', 'fontRefId', 'fontStyle', 'glyphScaleX', 'glyphScaleY',
 ]);
 
 const isQuickPartialOperation = (value: unknown): value is QuickPartialStyleOperation => {

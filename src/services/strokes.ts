@@ -93,7 +93,7 @@ const cloneRawPartialStrokes = (layers?: PartialStrokeLayers): PartialStrokeLaye
   ? Object.fromEntries(STROKE_KEYS.filter((key) => layers[key]).map((key) => [key, { ...layers[key] }]))
   : undefined;
 
-const removeStrokeLeaf = (
+export const clearRangeStrokeLeaf = (
   styles: PartialTextStyle[], start: number, end: number, layerKey: StrokeLayerKey, property: keyof StrokeStyle,
 ): PartialTextStyle[] => styles.flatMap((style) => {
   if (style.end <= start || style.start >= end || style.strokes?.[layerKey]?.[property] === undefined) return [style];
@@ -125,9 +125,9 @@ export const applyPartialStrokeEdits = (
   let next = styles;
   STROKE_KEYS.forEach((key) => {
     const edit = edits[key];
-    if (edit.enabled === 'inherit') next = removeStrokeLeaf(next, start, end, key, 'enabled');
-    if (edit.color === 'inherit') next = removeStrokeLeaf(next, start, end, key, 'color');
-    if (edit.width === 'inherit') next = removeStrokeLeaf(next, start, end, key, 'width');
+    if (edit.enabled === 'inherit') next = clearRangeStrokeLeaf(next, start, end, key, 'enabled');
+    if (edit.color === 'inherit') next = clearRangeStrokeLeaf(next, start, end, key, 'color');
+    if (edit.width === 'inherit') next = clearRangeStrokeLeaf(next, start, end, key, 'width');
   });
   const patch: PartialStrokeLayers = {};
   STROKE_KEYS.forEach((key, index) => {
@@ -146,4 +146,44 @@ export const applyPartialStrokeEdits = (
   });
   if (Object.keys(patch).length) next = [...next, { start, end, strokes: clonePartialStrokes(patch) }];
   return next;
+};
+
+export interface RangeStrokeOverrideState<T> {
+  presence: 'none' | 'all' | 'mixed';
+  value?: T;
+  valueMixed: boolean;
+}
+
+export const getRangeStrokeOverrideState = <K extends keyof StrokeStyle>(
+  styles: PartialTextStyle[], start: number, end: number, layerKey: StrokeLayerKey, property: K,
+): RangeStrokeOverrideState<NonNullable<StrokeStyle[K]>> => {
+  if (start >= end) return { presence: 'none', valueMixed: false };
+  const points = new Set([start, end]);
+  styles.forEach((style) => {
+    if (style.start > start && style.start < end) points.add(style.start);
+    if (style.end > start && style.end < end) points.add(style.end);
+  });
+  const sorted = [...points].sort((a, b) => a - b);
+  const values = sorted.slice(0, -1).map((point) => {
+    let value: StrokeStyle[K] | undefined;
+    styles.forEach((style) => {
+      const candidate = style.strokes?.[layerKey]?.[property];
+      if (style.start <= point && style.end > point && candidate !== undefined) value = candidate as StrokeStyle[K];
+    });
+    return value;
+  });
+  const defined = values.filter((value): value is NonNullable<StrokeStyle[K]> => value !== undefined);
+  if (!defined.length) return { presence: 'none', valueMixed: false };
+  const same = defined.every((value) => value === defined[0]);
+  if (defined.length === values.length && same) return { presence: 'all', value: defined[0], valueMixed: false };
+  return { presence: 'mixed', value: defined[0], valueMixed: !same || defined.length !== values.length };
+};
+
+export const setRangeStrokeLeaf = <K extends keyof StrokeStyle>(
+  styles: PartialTextStyle[], start: number, end: number,
+  layerKey: StrokeLayerKey, property: K, value: StrokeStyle[K],
+): PartialTextStyle[] => {
+  if (start >= end) return styles;
+  const cleared = clearRangeStrokeLeaf(styles, start, end, layerKey, property);
+  return [...cleared, { start, end, strokes: { [layerKey]: { [property]: value } } }];
 };

@@ -1,4 +1,4 @@
-import type { ColorPalette, FontReference, GraphicTextObject, ProjectDocument, TextDesignDefaults } from '@/src/types/editor';
+import type { ColorPalette, FontReference, GraphicTextObject, ProjectDocument, ProjectTextDefaults, TextDesignDefaults } from '@/src/types/editor';
 import { clonePartialStrokes, getStrokeLayers } from '@/src/services/strokes';
 import { normalizeLineGapOffsets } from '@/src/services/lineGapOffsets';
 
@@ -26,6 +26,7 @@ export const DEFAULT_GRAPHIC_TEXT_PRESET: GraphicTextPreset = {
     fontFamily: 'Yu Gothic UI',
     fontSize: 96,
     fontWeight: 900,
+    fontWeightAdjust: 0,
     fontStyle: 'normal',
     slant: 0,
     glyphScaleX: 1,
@@ -129,11 +130,37 @@ export const createGraphicText = (
 export const createInitialProject = (
   palette: ColorPalette = DEFAULT_COLOR_PALETTE,
   fontCatalog: FontReference[] = [],
+  projectTextDefaults?: ProjectTextDefaults,
 ): ProjectDocument => {
   const width = 1080;
   const height = 1920;
   const sampleObject = {
-    ...createGraphicText('しかし2人の活躍は\n批判も多かった', 0, width, height),
+    ...createGraphicText(
+      'ここにテキストを入力してください。',
+      0,
+      width,
+      height,
+      projectTextDefaults ? {
+        ...DEFAULT_GRAPHIC_TEXT_PRESET,
+        ...projectTextDefaults,
+        typography: { ...projectTextDefaults.typography },
+        characterScale: { ...projectTextDefaults.characterScale },
+        fill: projectTextDefaults.fill.type === 'solid'
+          ? { ...projectTextDefaults.fill }
+          : { ...projectTextDefaults.fill, stops: projectTextDefaults.fill.stops.map((stop) => ({ ...stop })) },
+        stroke: { ...projectTextDefaults.stroke },
+        outerStroke: { ...projectTextDefaults.outerStroke },
+        strokes: getStrokeLayers(projectTextDefaults),
+        shadow: { ...projectTextDefaults.shadow },
+        background: {
+          ...projectTextDefaults.background,
+          followSettings: projectTextDefaults.background.followSettings
+            ? { ...projectTextDefaults.background.followSettings }
+            : undefined,
+        },
+        partialStyles: [],
+      } : DEFAULT_GRAPHIC_TEXT_PRESET,
+    ),
     id: 'initial-sample',
   };
   return {

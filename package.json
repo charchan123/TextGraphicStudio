@@ -22,6 +22,7 @@
     "test:browser:phase30": "node scripts/phase30-browser-check.mjs",
     "test:logic:phase305": "node scripts/phase305-logic-check.mjs",
     "test:logic:phase307": "node scripts/phase307-logic-check.mjs",
+    "test:logic:phase308a": "node scripts/phase308a-logic-check.mjs",
     "format": "oxfmt"
   },
   "dependencies": {

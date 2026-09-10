@@ -1,6 +1,7 @@
 import { cloneGraphicObject, normalizeProjectDocument } from '@/src/services/documentData';
-import { createInitialProject } from '@/src/store/defaults';
-import type { ColorPalette, FontReference, ProjectDocument, ProjectFrame, StudioProject } from '@/src/types/editor';
+import { createInitialProject, DEFAULT_GRAPHIC_TEXT_PRESET } from '@/src/store/defaults';
+import { cloneProjectTextDefaults, toProjectTextDefaults } from '@/src/services/textDefaults';
+import type { ColorPalette, FontReference, ProjectDocument, ProjectFrame, ProjectTextDefaults, StudioProject, TextDesignDefaults } from '@/src/types/editor';
 
 const makeId = (prefix: string): string => {
   if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID();
@@ -32,22 +33,31 @@ export const createStudioProject = (
   palette?: ColorPalette,
   fontCatalog?: FontReference[],
   name = '名称未設定のプロジェクト',
+  seedDefaults: TextDesignDefaults | ProjectTextDefaults = DEFAULT_GRAPHIC_TEXT_PRESET,
 ): StudioProject => {
   const now = new Date().toISOString();
-  const frame = createProjectFrame(createInitialProject(palette, fontCatalog), 'トップ');
+  const projectTextDefaults = toProjectTextDefaults(seedDefaults);
+  const frame = createProjectFrame(createInitialProject(palette, fontCatalog, projectTextDefaults), 'トップ');
   return {
     kind: 'text-graphic-studio-multi-frame-project', schemaVersion: 1,
     projectId: createProjectId(), projectName: name, frames: [frame], activeFrameId: frame.frameId,
+    projectTextDefaults,
     createdAt: now, updatedAt: now,
   };
 };
 
-export const wrapLegacyDocument = (document: ProjectDocument, name = '名称未設定のプロジェクト'): StudioProject => {
+export const wrapLegacyDocument = (
+  document: ProjectDocument,
+  name = '名称未設定のプロジェクト',
+  fallbackDefaults: TextDesignDefaults | ProjectTextDefaults = DEFAULT_GRAPHIC_TEXT_PRESET,
+): StudioProject => {
   const now = new Date().toISOString();
-  const frame = createProjectFrame(normalizeProjectDocument(document), 'トップ');
+  const normalizedDocument = normalizeProjectDocument(document);
+  const frame = createProjectFrame(normalizedDocument, 'トップ');
   return {
     kind: 'text-graphic-studio-multi-frame-project', schemaVersion: 1,
     projectId: createProjectId(), projectName: name, frames: [frame], activeFrameId: frame.frameId,
+    projectTextDefaults: toProjectTextDefaults(normalizedDocument.objects[0] ?? fallbackDefaults),
     createdAt: now, updatedAt: document.updatedAt || now,
   };
 };
@@ -68,19 +78,26 @@ export const materializeActiveDocument = (project: StudioProject, document: Proj
 
 export const cloneStudioProject = (project: StudioProject): StudioProject => ({
   ...project,
+  projectTextDefaults: project.projectTextDefaults ? cloneProjectTextDefaults(project.projectTextDefaults) : undefined,
   frames: project.frames.map((frame) => ({ ...frame, document: cloneProjectDocument(frame.document) })),
 });
 
-export const normalizeStudioProject = (project: StudioProject): StudioProject => {
+export const normalizeStudioProject = (
+  project: StudioProject,
+  fallbackDefaults: TextDesignDefaults | ProjectTextDefaults = DEFAULT_GRAPHIC_TEXT_PRESET,
+): StudioProject => {
   const frames = project.frames.map((frame, index) => ({
     ...frame,
     name: frame.name?.trim() || (index === 0 ? 'トップ' : `${index + 1}コマ目`),
     completedLocked: Boolean(frame.completedLocked),
     document: normalizeProjectDocument(frame.document),
   }));
-  if (!frames.length) return createStudioProject(undefined, undefined, project.projectName);
+  if (!frames.length) return createStudioProject(undefined, undefined, project.projectName, fallbackDefaults);
   const activeFrameId = frames.some((frame) => frame.frameId === project.activeFrameId) ? project.activeFrameId : frames[0].frameId;
-  return { ...project, frames, activeFrameId, projectName: project.projectName?.trim() || '名称未設定のプロジェクト' };
+  const projectTextDefaults = project.projectTextDefaults
+    ? cloneProjectTextDefaults(project.projectTextDefaults)
+    : toProjectTextDefaults(frames[0].document.objects[0] ?? fallbackDefaults);
+  return { ...project, frames, activeFrameId, projectTextDefaults, projectName: project.projectName?.trim() || '名称未設定のプロジェクト' };
 };
 
 export const isStudioProjectShape = (value: unknown): value is StudioProject => {

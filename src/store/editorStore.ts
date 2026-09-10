@@ -17,7 +17,15 @@ import {
   normalizeStudioProject,
 } from '@/src/services/studioProject';
 import { cloneQuickPartialOperation, cloneQuickPartialPreset, MAX_QUICK_PARTIAL_PRESETS } from '@/src/services/quickPartialPresets';
-import { cloneTextDesignDefaults, textDesignDefaultsEqual, toTextDesignDefaults } from '@/src/services/textDefaults';
+import {
+  cloneProjectTextDefaults,
+  cloneTextDesignDefaults,
+  projectTextDefaultsEqual,
+  textDesignDefaultsEqual,
+  toProjectTextDefaults,
+  toTextDesignDefaults,
+  withProjectTextDefaults,
+} from '@/src/services/textDefaults';
 import { updateGraphicTextContent } from '@/src/services/textContent';
 import type {
   AppNotice,
@@ -27,6 +35,7 @@ import type {
   GraphicTextObject,
   GraphicTextTemplateV1,
   ProjectDocument,
+  ProjectTextDefaults,
   StudioProject,
   QuickPartialPreset,
   QuickPartialStyleOperation,
@@ -37,6 +46,13 @@ type ObjectUpdater = (object: GraphicTextObject) => GraphicTextObject;
 type LayerDirection = 'front' | 'forward' | 'backward' | 'back';
 type CanvasCenterMode = 'horizontal' | 'vertical' | 'both';
 type SocialGuide = NonNullable<ProjectDocument['canvas']['socialGuide']>;
+interface TextSelectionState {
+  frameId: string;
+  objectId: string;
+  text: string;
+  start: number;
+  end: number;
+}
 
 export interface ProjectTextChange {
   frameId: string;
@@ -52,6 +68,8 @@ interface EditorState {
   studioProject: StudioProject;
   project: ProjectDocument;
   selectedId: string | null;
+  textSelection: TextSelectionState | null;
+  partialStyleExpanded: boolean;
   past: ProjectDocument[];
   future: ProjectDocument[];
   transactionBase: ProjectDocument | null;
@@ -70,6 +88,8 @@ interface EditorState {
   updateQuickPartialPreset: (id: string, patch: { name?: string; operation?: QuickPartialStyleOperation }) => void;
   deleteQuickPartialPreset: (id: string) => void;
   selectObject: (id: string | null) => void;
+  setTextSelection: (selection: EditorState['textSelection']) => void;
+  setPartialStyleExpanded: (expanded: boolean) => void;
   beginTransaction: () => void;
   finishTransaction: () => void;
   updateObject: (id: string, updater: ObjectUpdater, recordHistory?: boolean) => void;
@@ -89,6 +109,7 @@ interface EditorState {
   setSocialGuide: (guide: SocialGuide) => void;
   setPaletteColor: (index: number, color: string) => void;
   addFontReference: (font: FontReference) => void;
+  setProjectTextDefaults: (defaults: ProjectTextDefaults, fontReferences?: FontReference[]) => void;
   applyTemplate: (template: GraphicTextTemplateV1) => void;
   replaceProject: (project: ProjectDocument) => void;
   replaceStudioProject: (project: StudioProject) => void;
@@ -135,6 +156,8 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   studioProject: initialStudioProject,
   project: initialProject,
   selectedId: initialProject.objects[0]?.id ?? null,
+  textSelection: null,
+  partialStyleExpanded: false,
   past: [],
   future: [],
   transactionBase: null,
@@ -167,7 +190,22 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   deleteQuickPartialPreset: (id) => set((state) => ({
     quickPartialPresets: state.quickPartialPresets.filter((preset) => preset.id !== id),
   })),
-  selectObject: (selectedId) => set({ selectedId }),
+  selectObject: (selectedId) => set((state) => ({
+    selectedId,
+    textSelection: state.textSelection?.objectId === selectedId ? state.textSelection : null,
+  })),
+  setTextSelection: (textSelection) => set((state) => {
+    if (!textSelection) return { textSelection: null };
+    const object = state.project.objects.find((candidate) => candidate.id === textSelection.objectId);
+    const valid = textSelection.frameId === state.studioProject.activeFrameId
+      && state.selectedId === textSelection.objectId
+      && object?.text === textSelection.text
+      && textSelection.start >= 0
+      && textSelection.start < textSelection.end
+      && textSelection.end <= textSelection.text.length;
+    return { textSelection: valid ? textSelection : null };
+  }),
+  setPartialStyleExpanded: (partialStyleExpanded) => set({ partialStyleExpanded }),
 
   beginTransaction: () =>
     set((state) => ({ transactionBase: state.transactionBase ?? state.project })),
@@ -191,8 +229,14 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       if (!existing) return state;
       if (existing.fullyLocked) return editBlocked(state, '完全ロック中のオブジェクトは編集できません。');
       const updated = updater(existing);
+      const textSelection = state.textSelection?.objectId === id && updated.text !== existing.text
+        ? null
+        : state.textSelection;
       const previousDefaults = toTextDesignDefaults(existing);
       const nextDefaults = toTextDesignDefaults(updated);
+      const previousProjectDefaults = toProjectTextDefaults(existing);
+      const nextProjectDefaults = toProjectTextDefaults(updated);
+      const projectDefaultsChanged = !projectTextDefaultsEqual(previousProjectDefaults, nextProjectDefaults);
       const nextProject = stampProject({
         ...state.project,
         objects: state.project.objects.map((object) =>
@@ -201,14 +245,23 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       });
       const defaultsPatch = textDesignDefaultsEqual(previousDefaults, nextDefaults)
         ? {} : { lastUsedTextDefaults: nextDefaults };
-      if (!recordHistory) return { project: nextProject, ...defaultsPatch };
+      const studioDefaultsPatch = projectDefaultsChanged ? {
+        studioProject: {
+          ...state.studioProject,
+          projectTextDefaults: nextProjectDefaults,
+          updatedAt: nextProject.updatedAt,
+        },
+      } : {};
+      if (!recordHistory) return { project: nextProject, textSelection, ...defaultsPatch, ...studioDefaultsPatch };
       const historyBase = state.transactionBase ?? state.project;
       return {
         project: nextProject,
         past: pushHistory(state.past, historyBase),
         future: [],
         transactionBase: null,
+        textSelection,
         ...defaultsPatch,
+        ...studioDefaultsPatch,
       };
     }),
 
@@ -237,7 +290,10 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         state.project.objects.length,
         state.project.canvas.width,
         state.project.canvas.height,
-        state.lastUsedTextDefaults,
+        withProjectTextDefaults(
+          state.lastUsedTextDefaults,
+          state.studioProject.projectTextDefaults ?? toProjectTextDefaults(state.lastUsedTextDefaults),
+        ),
         true,
       );
       return {
@@ -246,6 +302,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
           objects: normalizeZIndexes([...state.project.objects, newObject]),
         }),
         selectedId: newObject.id,
+        textSelection: null,
         past: pushHistory(state.past, state.transactionBase ?? state.project),
         future: [],
         transactionBase: null,
@@ -319,6 +376,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       return {
         project: stampProject({ ...state.project, objects: [...state.project.objects, duplicate] }),
         selectedId: duplicate.id,
+        textSelection: null,
         past: pushHistory(state.past, state.transactionBase ?? state.project),
         future: [],
         transactionBase: null,
@@ -337,6 +395,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       return {
         project: stampProject({ ...state.project, objects }),
         selectedId: state.selectedId === id ? objects.at(-1)?.id ?? null : state.selectedId,
+        textSelection: state.textSelection?.objectId === id ? null : state.textSelection,
         past: pushHistory(state.past, state.transactionBase ?? state.project),
         future: [],
         transactionBase: null,
@@ -474,6 +533,25 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
     };
   }),
 
+  setProjectTextDefaults: (defaults, fontReferences = []) => set((state) => {
+    const nextDefaults = cloneProjectTextDefaults(defaults);
+    const fontCatalog = [...state.project.fontCatalog];
+    fontReferences.forEach((font) => {
+      const index = fontCatalog.findIndex((candidate) => candidate.id === font.id);
+      if (index >= 0) fontCatalog[index] = { ...font }; else fontCatalog.push({ ...font });
+    });
+    const project = fontReferences.length ? stampProject({ ...state.project, fontCatalog }) : state.project;
+    const studioProject = materializeActiveDocument(state.studioProject, project);
+    return {
+      project,
+      studioProject: {
+        ...studioProject,
+        projectTextDefaults: nextDefaults,
+        updatedAt: new Date().toISOString(),
+      },
+    };
+  }),
+
   applyTemplate: (template) => set((state) => {
     if (activeFrameLocked(state)) return editBlocked(state);
     const id = state.selectedId;
@@ -504,6 +582,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       position: template.includePosition && template.position ? { ...template.position } : existing.position,
     };
     const lastUsedTextDefaults = toTextDesignDefaults(updated);
+    const projectTextDefaults = toProjectTextDefaults(updated);
     return {
       project: stampProject({
         ...state.project,
@@ -515,6 +594,11 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       future: [],
       transactionBase: null,
       lastUsedTextDefaults,
+      studioProject: {
+        ...state.studioProject,
+        projectTextDefaults,
+        updatedAt: new Date().toISOString(),
+      },
     };
   }),
 
@@ -523,16 +607,18 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       studioProject: materializeActiveDocument(state.studioProject, project),
       project,
       selectedId: project.objects.at(-1)?.id ?? null,
+      textSelection: null,
       past: [], future: [], transactionBase: null,
     })),
 
-  replaceStudioProject: (incoming) => set(() => {
-    const studioProject = normalizeStudioProject(incoming);
+  replaceStudioProject: (incoming) => set((state) => {
+    const studioProject = normalizeStudioProject(incoming, state.lastUsedTextDefaults);
     const project = cloneProjectDocument(activeFrameOf(studioProject).document);
     return {
       studioProject,
       project,
       selectedId: project.objects.at(-1)?.id ?? null,
+      textSelection: null,
       past: [], future: [], transactionBase: null,
     };
   }),
@@ -563,7 +649,11 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
   addFrame: () => set((state) => {
     const studioProject = materializeActiveDocument(state.studioProject, state.project);
-    const document = createInitialProject(state.project.palette, state.project.fontCatalog);
+    const document = createInitialProject(
+      state.project.palette,
+      state.project.fontCatalog,
+      studioProject.projectTextDefaults ?? toProjectTextDefaults(state.lastUsedTextDefaults),
+    );
     const now = new Date().toISOString();
     const frameId = createFrameId();
     const frame = {
@@ -578,6 +668,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       studioProject: { ...studioProject, frames: [...studioProject.frames, frame], activeFrameId: frameId, updatedAt: now },
       project: document,
       selectedId: document.objects[0]?.id ?? null,
+      textSelection: null,
       past: [], future: [], transactionBase: null,
     };
   }),
@@ -606,6 +697,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       studioProject: { ...studioProject, frames, activeFrameId: duplicate.frameId, updatedAt: now },
       project: document,
       selectedId: document.objects.at(-1)?.id ?? null,
+      textSelection: null,
       past: [], future: [], transactionBase: null,
     };
   }),
@@ -627,6 +719,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       studioProject: { ...studioProject, frames, activeFrameId, updatedAt: new Date().toISOString() },
       project: nextDocument,
       selectedId: nextDocument.objects.at(-1)?.id ?? null,
+      textSelection: null,
       past: [], future: [], transactionBase: null,
     };
   }),
@@ -650,6 +743,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       studioProject: { ...studioProject, activeFrameId: frameId },
       project,
       selectedId: project.objects.at(-1)?.id ?? null,
+      textSelection: null,
       past: [], future: [], transactionBase: null,
     };
   }),
@@ -742,6 +836,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
           past: [],
           future: [],
           transactionBase: null,
+          textSelection: null,
         };
       } catch {
         result = { ok: false, message: '文章の正規化中に問題が発生したため、変更前のProjectを維持しました。' };
@@ -753,12 +848,18 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
   createNewProject: () =>
     set((state) => {
-      const studioProject = createStudioProject(state.project.palette, state.project.fontCatalog);
+      const studioProject = createStudioProject(
+        state.project.palette,
+        state.project.fontCatalog,
+        '名称未設定のプロジェクト',
+        state.lastUsedTextDefaults,
+      );
       const project = activeFrameOf(studioProject).document;
       return {
         studioProject,
         project,
         selectedId: project.objects[0]?.id ?? null,
+        textSelection: null,
         past: [], future: [], transactionBase: null,
       };
     }),
@@ -771,9 +872,21 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         ? state.selectedId
         : previous.objects.at(-1)?.id ?? null;
       const selected = previous.objects.find((object) => object.id === selectedId);
+      const currentSelected = state.project.objects.find((object) => object.id === selectedId);
+      const defaultsChanged = Boolean(selected && currentSelected)
+        && !projectTextDefaultsEqual(toProjectTextDefaults(selected!), toProjectTextDefaults(currentSelected!));
+      const projectTextDefaults = defaultsChanged && selected
+        ? toProjectTextDefaults(selected)
+        : state.studioProject.projectTextDefaults;
       return {
         project: previous,
+        studioProject: { ...state.studioProject, projectTextDefaults },
         selectedId,
+        textSelection: state.textSelection
+          && state.textSelection.frameId === state.studioProject.activeFrameId
+          && previous.objects.find((object) => object.id === state.textSelection?.objectId)?.text === state.textSelection.text
+          ? state.textSelection
+          : null,
         past: state.past.slice(0, -1),
         future: [state.project, ...state.future].slice(0, HISTORY_LIMIT),
         transactionBase: null,
@@ -789,9 +902,21 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         ? state.selectedId
         : next.objects.at(-1)?.id ?? null;
       const selected = next.objects.find((object) => object.id === selectedId);
+      const currentSelected = state.project.objects.find((object) => object.id === selectedId);
+      const defaultsChanged = Boolean(selected && currentSelected)
+        && !projectTextDefaultsEqual(toProjectTextDefaults(selected!), toProjectTextDefaults(currentSelected!));
+      const projectTextDefaults = defaultsChanged && selected
+        ? toProjectTextDefaults(selected)
+        : state.studioProject.projectTextDefaults;
       return {
         project: next,
+        studioProject: { ...state.studioProject, projectTextDefaults },
         selectedId,
+        textSelection: state.textSelection
+          && state.textSelection.frameId === state.studioProject.activeFrameId
+          && next.objects.find((object) => object.id === state.textSelection?.objectId)?.text === state.textSelection.text
+          ? state.textSelection
+          : null,
         past: pushHistory(state.past, state.project),
         future: state.future.slice(1),
         transactionBase: null,
