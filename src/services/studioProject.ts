@@ -57,7 +57,7 @@ export const wrapLegacyDocument = (
   return {
     kind: 'text-graphic-studio-multi-frame-project', schemaVersion: 1,
     projectId: createProjectId(), projectName: name, frames: [frame], activeFrameId: frame.frameId,
-    projectTextDefaults: toProjectTextDefaults(normalizedDocument.objects[0] ?? fallbackDefaults),
+    projectTextDefaults: { ...toProjectTextDefaults(normalizedDocument.objects[0] ?? fallbackDefaults), rotation: 0 },
     createdAt: now, updatedAt: document.updatedAt || now,
   };
 };
@@ -96,7 +96,7 @@ export const normalizeStudioProject = (
   const activeFrameId = frames.some((frame) => frame.frameId === project.activeFrameId) ? project.activeFrameId : frames[0].frameId;
   const projectTextDefaults = project.projectTextDefaults
     ? cloneProjectTextDefaults(project.projectTextDefaults)
-    : toProjectTextDefaults(frames[0].document.objects[0] ?? fallbackDefaults);
+    : { ...toProjectTextDefaults(frames[0].document.objects[0] ?? fallbackDefaults), rotation: 0 };
   return { ...project, frames, activeFrameId, projectTextDefaults, projectName: project.projectName?.trim() || '名称未設定のプロジェクト' };
 };
 

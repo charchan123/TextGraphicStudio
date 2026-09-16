@@ -4,6 +4,7 @@ import { createFabricGraphicText } from '@/src/canvas/graphicTextRenderer';
 import { prepareGraphicAssets } from '@/src/services/textBackgroundAssets';
 import { waitForGraphicFonts } from '@/src/services/fontService';
 import { downloadBlob, downloadDataUrl, sanitizeFileName } from '@/src/services/download';
+import { graphicPngFileName } from '@/src/services/exportFileNames';
 import type { GraphicTextObject, ProjectDocument, StudioProject } from '@/src/types/editor';
 import { maxVisibleStrokeWidth } from '@/src/services/strokes';
 import { createZipBlob } from '@/src/services/zipService';
@@ -200,7 +201,7 @@ export const renderProjectBackgroundPngBlob = async (project: ProjectDocument): 
 
 export const exportGraphicPng = async (object: GraphicTextObject): Promise<void> => {
   const dataUrl = await renderGraphicDataUrl(object);
-  downloadDataUrl(dataUrl, `${sanitizeFileName(object.name)}.png`);
+  downloadDataUrl(dataUrl, graphicPngFileName(object.name));
 };
 
 export const exportAllGraphicsPng = async (objects: GraphicTextObject[]): Promise<number> => {

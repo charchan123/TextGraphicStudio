@@ -189,6 +189,11 @@ export function StylePanel() {
       </section>
 
       <section className="panel-section panel-section-group-start">
+        <div className="section-heading"><div><h2>グループの回転</h2><p>現在のTextと今後追加するTextの既定角度</p></div></div>
+        <SliderField label="グループの回転" value={selected.transform.rotation} min={-180} max={180} unit="°" onBegin={editor.begin} onPreview={(rotation) => editor.preview((object) => ({ ...object, transform: { ...object.transform, rotation } }))} onCommit={editor.finish} />
+      </section>
+
+      <section className="panel-section panel-section-group-start">
         <div className="section-heading"><div><h2>Project共通Text基本設定</h2><p>既存Textは変更せず、今後追加するTextへ使用します</p></div></div>
         <div className="inline-actions">
           <Button type="button" variant="outline" onClick={() => {

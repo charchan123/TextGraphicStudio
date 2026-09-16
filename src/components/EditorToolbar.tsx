@@ -75,7 +75,14 @@ export function EditorToolbar({
   return (
     <header className="editor-toolbar">
       <div className="brand-block">
-        <div className="brand-mark" aria-hidden="true">T</div>
+        <div className="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 36 36" focusable="false">
+            <path className="brand-edit-frame" d="M11 6.5H5.5V12M25 6.5h5.5V12M30.5 24v5.5H25M11 29.5H5.5V24" />
+            <path className="brand-type-glyph" d="M9 10h14v3.2h-5.35V26h-3.3V13.2H9z" />
+            <rect className="brand-text-caret" x="25" y="10.5" width="2.2" height="15.5" rx="1.1" />
+            <rect className="brand-selection-handle" x="28.6" y="27.6" width="3" height="3" rx="0.6" />
+          </svg>
+        </div>
         <div className="brand-copy">
           <p className="brand-name">Text Graphic Studio</p>
           <p className="brand-meta">ローカル編集 • {project.canvas.width} × {project.canvas.height}</p>

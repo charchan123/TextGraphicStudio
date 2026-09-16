@@ -79,6 +79,7 @@ export const isProjectTextDefaults = (value: unknown): value is ProjectTextDefau
   const scales = value.characterScale;
   const shadow = value.shadow;
   return isSafeFontText(typography.fontFamily)
+    && (value.rotation === undefined || bounded(value.rotation, -180, 180))
     && (typography.fontRefId === undefined || isSafeFontText(typography.fontRefId))
     && bounded(typography.fontSize, 8, 400)
     && (typography.fontWeight === 400 || typography.fontWeight === 700 || typography.fontWeight === 900)

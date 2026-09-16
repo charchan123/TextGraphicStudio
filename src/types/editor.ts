@@ -294,11 +294,14 @@ export type TextDesignDefaults = Omit<
   'id' | 'name' | 'text' | 'position' | 'zIndex' | 'lineGapOffsets'
 >;
 
-/** Project-scoped appearance defaults. Content, geometry, locks and range/line corrections are intentionally excluded. */
+/** Project-scoped appearance defaults. Content, position, scale, locks and range/line corrections are excluded. */
 export type ProjectTextDefaults = Pick<
   GraphicTextObject,
   'typography' | 'characterScale' | 'fill' | 'stroke' | 'outerStroke' | 'strokes' | 'shadow' | 'background'
->;
+> & {
+  /** Optional for backward compatibility. Missing legacy values normalize to 0 degrees. */
+  rotation?: number;
+};
 
 export interface TextDefaultsFileV1 {
   type: 'text-graphic-studio-text-defaults';

@@ -11,6 +11,7 @@ import { createTextDefaultsFile, parseTextDefaultsFile, readTextDefaultsFile } f
 import { normalizeStudioProject } from '@/src/services/studioProject';
 import { toProjectTextDefaults } from '@/src/services/textDefaults';
 import { getOutputPreviewKeyboardAction, getOutputPreviewTargetIndex } from '@/src/services/outputPreviewNavigation';
+import { graphicPngFileName } from '@/src/services/exportFileNames';
 import { useEditorStore } from '@/src/store/editorStore';
 
 const fillRed = { type: 'solid' as const, color: '#FF0000' };
@@ -22,6 +23,9 @@ assert.equal(getOutputPreviewTargetIndex(0, 4, 'previous'), 0);
 assert.equal(getOutputPreviewTargetIndex(1, 4, 'previous'), 0);
 assert.equal(getOutputPreviewTargetIndex(1, 4, 'next'), 2);
 assert.equal(getOutputPreviewTargetIndex(3, 4, 'next'), 3);
+assert.equal(graphicPngFileName('テキスト 1'), 'テキスト1.png');
+assert.equal(graphicPngFileName('テキスト 12'), 'テキスト12.png');
+assert.equal(graphicPngFileName('甲子園 決勝'), '甲子園 決勝.png');
 const none = getRangeOverrideState([], 0, 2, 'fill');
 assert.equal(none.presence, 'none');
 
@@ -143,12 +147,33 @@ state().updateObject(firstId, (object) => ({ ...object, text: object.text + '!' 
 assert.equal(state().textSelection, null);
 state().undo();
 
+state().addGraphic('既存別Text');
+const otherObjectId = state().selectedId!;
+const otherRotation = state().project.objects.find((object) => object.id === otherObjectId)!.transform.rotation;
+state().selectObject(firstId);
+const previousRotation = state().project.objects.find((object) => object.id === firstId)!.transform.rotation;
+state().updateObject(firstId, (object) => ({
+  ...object,
+  transform: { ...object.transform, rotation: -8 },
+}));
+assert.equal(state().project.objects.find((object) => object.id === firstId)!.transform.rotation, -8);
+assert.equal(state().studioProject.projectTextDefaults?.rotation, -8);
+assert.equal(state().project.objects.find((object) => object.id === otherObjectId)!.transform.rotation, otherRotation);
+state().undo();
+assert.equal(state().project.objects.find((object) => object.id === firstId)!.transform.rotation, previousRotation);
+assert.equal(state().studioProject.projectTextDefaults?.rotation, previousRotation);
+state().redo();
+assert.equal(state().project.objects.find((object) => object.id === firstId)!.transform.rotation, -8);
+assert.equal(state().studioProject.projectTextDefaults?.rotation, -8);
+
 state().addFrame();
 assert.equal(state().textSelection, null);
 assert.equal(state().project.objects[0].text, 'ここにテキストを入力してください。');
 assert.equal(state().project.objects[0].typography.fontWeightAdjust, 6);
+assert.equal(state().project.objects[0].transform.rotation, -8);
 state().addGraphic('追加Text');
 assert.equal(state().project.objects.at(-1)?.typography.fontWeightAdjust, 6);
+assert.equal(state().project.objects.at(-1)?.transform.rotation, -8);
 
 const sourceSnapshot = state().getStudioProjectSnapshot();
 const sourceFrameId = sourceSnapshot.activeFrameId;
@@ -173,6 +198,7 @@ const textDefaultsFile = createTextDefaultsFile(importedDefaults, [{
 }]);
 const parsedDefaults = parseTextDefaultsFile(JSON.parse(JSON.stringify(textDefaultsFile)));
 assert.equal(parsedDefaults.defaults.typography.fontWeightAdjust, 3);
+assert.equal(parsedDefaults.defaults.rotation, -8);
 assert.equal(parsedDefaults.fontReferences[0].id, 'local:test');
 
 const embeddedDefaults = {
@@ -210,6 +236,7 @@ assert.equal(portableFile.fontReferences?.length, 1);
 assert.equal(portableFile.fontReferences?.[0].id, 'local:test');
 const selfImported = await readTextDefaultsFile(new File([portableJson], 'defaults.tgsstyle.json', { type: 'application/json' }));
 assert.equal(JSON.stringify(selfImported.defaults), JSON.stringify(portableFile.defaults));
+assert.equal(selfImported.defaults.rotation, -8);
 assert.deepEqual(selfImported.fontReferences, portableFile.fontReferences);
 
 const existingBeforeRoundTrip = JSON.stringify(state().project.objects);
@@ -242,11 +269,15 @@ await assert.rejects(
 
 const roundTrip = normalizeStudioProject(JSON.parse(JSON.stringify(state().getStudioProjectSnapshot())));
 assert.equal(roundTrip.projectTextDefaults?.typography.fontWeightAdjust, 3);
+assert.equal(roundTrip.projectTextDefaults?.rotation, -8);
 assert.equal(roundTrip.frames.at(-1)?.document.objects.at(-1)?.typography.fontWeightAdjust, 3);
 
 const oldProject = { ...roundTrip, projectTextDefaults: undefined };
 const derived = normalizeStudioProject(oldProject);
-assert.deepEqual(derived.projectTextDefaults, toProjectTextDefaults(derived.frames[0].document.objects[0]));
+assert.deepEqual(derived.projectTextDefaults, { ...toProjectTextDefaults(derived.frames[0].document.objects[0]), rotation: 0 });
+const legacyDefaults = { ...roundTrip.projectTextDefaults };
+delete legacyDefaults.rotation;
+assert.equal(normalizeStudioProject({ ...roundTrip, projectTextDefaults: legacyDefaults }).projectTextDefaults?.rotation, 0);
 const noText = normalizeStudioProject({
   ...oldProject,
   frames: oldProject.frames.map((frame) => ({ ...frame, document: { ...frame.document, objects: [] } })),
@@ -271,4 +302,4 @@ state().updateObject(state().project.objects[0].id, (object) => ({
 }));
 assert.equal(JSON.stringify(state().studioProject.projectTextDefaults), lockedDefaults);
 
-console.log(JSON.stringify({ passed: true, checks: 58 }, null, 2));
+console.log(JSON.stringify({ passed: true, checks: 77 }, null, 2));

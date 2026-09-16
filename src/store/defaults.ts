@@ -134,32 +134,37 @@ export const createInitialProject = (
 ): ProjectDocument => {
   const width = 1080;
   const height = 1920;
+  const initialPreset: TextDesignDefaults = projectTextDefaults ? (() => {
+    const { rotation = 0, ...appearance } = projectTextDefaults;
+    return {
+      ...DEFAULT_GRAPHIC_TEXT_PRESET,
+      ...appearance,
+      transform: { ...DEFAULT_GRAPHIC_TEXT_PRESET.transform, rotation },
+      typography: { ...projectTextDefaults.typography },
+      characterScale: { ...projectTextDefaults.characterScale },
+      fill: projectTextDefaults.fill.type === 'solid'
+        ? { ...projectTextDefaults.fill }
+        : { ...projectTextDefaults.fill, stops: projectTextDefaults.fill.stops.map((stop) => ({ ...stop })) },
+      stroke: { ...projectTextDefaults.stroke },
+      outerStroke: { ...projectTextDefaults.outerStroke },
+      strokes: getStrokeLayers(projectTextDefaults),
+      shadow: { ...projectTextDefaults.shadow },
+      background: {
+        ...projectTextDefaults.background,
+        followSettings: projectTextDefaults.background.followSettings
+          ? { ...projectTextDefaults.background.followSettings }
+          : undefined,
+      },
+      partialStyles: [],
+    };
+  })() : DEFAULT_GRAPHIC_TEXT_PRESET;
   const sampleObject = {
     ...createGraphicText(
       'ここにテキストを入力してください。',
       0,
       width,
       height,
-      projectTextDefaults ? {
-        ...DEFAULT_GRAPHIC_TEXT_PRESET,
-        ...projectTextDefaults,
-        typography: { ...projectTextDefaults.typography },
-        characterScale: { ...projectTextDefaults.characterScale },
-        fill: projectTextDefaults.fill.type === 'solid'
-          ? { ...projectTextDefaults.fill }
-          : { ...projectTextDefaults.fill, stops: projectTextDefaults.fill.stops.map((stop) => ({ ...stop })) },
-        stroke: { ...projectTextDefaults.stroke },
-        outerStroke: { ...projectTextDefaults.outerStroke },
-        strokes: getStrokeLayers(projectTextDefaults),
-        shadow: { ...projectTextDefaults.shadow },
-        background: {
-          ...projectTextDefaults.background,
-          followSettings: projectTextDefaults.background.followSettings
-            ? { ...projectTextDefaults.background.followSettings }
-            : undefined,
-        },
-        partialStyles: [],
-      } : DEFAULT_GRAPHIC_TEXT_PRESET,
+      initialPreset,
     ),
     id: 'initial-sample',
   };

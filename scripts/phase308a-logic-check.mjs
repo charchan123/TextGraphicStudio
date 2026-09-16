@@ -58,6 +58,17 @@ try {
   assert.equal(toolbar.includes("['hidden', '非表示', EyeOff]"), true);
   assert.match(globalCss, /\.editor-toolbar \{ display: flex;/);
   assert.match(globalCss, /\.toolbar-export \{[^}]*overflow-x: auto;/);
+  assert.match(globalCss, /\.brand-block \{ flex: 0 0 252px;/);
+  assert.doesNotMatch(globalCss, /@media \(max-width: 1280px\)[^{]*\{[^}]*\.brand-meta \{ display: none;/);
+  assert.match(globalCss, /@media \(max-width: 1040px\)[\s\S]*\.brand-block \{ flex: 0 0 184px; \}[\s\S]*\.brand-meta \{ display: none; \}/);
+  assert.match(globalCss, /@media \(max-width: 860px\)[\s\S]*\.brand-block \{ flex: 0 0 36px; \}[\s\S]*\.brand-copy \{ display: none; \}/);
+  assert.equal(toolbar.includes('<svg viewBox="0 0 36 36"'), true);
+  assert.equal(toolbar.includes('brand-edit-frame'), true);
+  assert.equal(toolbar.includes('brand-type-glyph'), true);
+  assert.equal(toolbar.includes('brand-text-caret'), true);
+  assert.equal(toolbar.includes('brand-selection-handle'), true);
+  assert.equal(toolbar.includes('<div className="brand-mark" aria-hidden="true">T</div>'), false);
+  assert.equal(toolbar.includes('aria-label="新規"'), true);
   assert.equal(previewDialog.includes("window.addEventListener('keydown', handleKeyDown, true)"), true);
   assert.equal(previewDialog.includes('getFrameDisplayLabel(frame.frameIndex)'), true);
   assert.equal(previewDialog.includes("aria-current={current ? 'true' : undefined}"), true);
@@ -85,6 +96,7 @@ try {
   assert.deepEqual([...textSectionOrder].sort((left, right) => left - right), textSectionOrder);
   assert.equal((textPanel.match(/<LineGapEditor/g) ?? []).length, 1);
   assert.equal(textPanel.split('<h2>配置</h2>').length - 1, 1);
+  assert.equal(textPanel.includes('グループの回転'), false);
   assert.equal(stylePanel.includes('<LineGapEditor'), false);
   assert.equal(stylePanel.includes('<h2>文字揃え</h2>'), false);
   assert.equal(stylePanel.includes('<h2>配置</h2>'), false);
@@ -94,6 +106,7 @@ try {
     '<h2>塗り</h2>',
     '<StrokeEditor',
     '<h2>影</h2>',
+    '<h2>グループの回転</h2>',
     '<h2>Project共通Text基本設定</h2>',
   ].map((marker) => stylePanel.indexOf(marker));
   assert.ok(styleSectionOrder.every((index) => index >= 0));
@@ -110,6 +123,7 @@ try {
     'label="文字高さ"',
     'id="text-fill-type"',
     'label="影を使用"',
+    'label="グループの回転"',
   ].forEach((marker) => assert.equal(stylePanel.includes(marker), true));
   console.log(JSON.stringify({
     passed: true,
@@ -127,6 +141,10 @@ try {
       'Preview keyboard and shared navigation state',
       'Preview thumbnail order and labels',
       'PC font list reload',
+      'project rotation defaults and persistence',
+      'selected PNG default filename normalization',
+      'non-overlapping responsive brand region',
+      'inline SVG brand mark',
     ],
   }, null, 2));
 } finally {

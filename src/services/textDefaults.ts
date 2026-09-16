@@ -34,7 +34,9 @@ export const toProjectTextDefaults = (
   source: GraphicTextObject | TextDesignDefaults | ProjectTextDefaults,
 ): ProjectTextDefaults => {
   const strokes = getStrokeLayers(source);
+  const rotation = 'transform' in source ? source.transform.rotation : source.rotation ?? 0;
   return {
+    rotation,
     typography: { ...source.typography },
     characterScale: { ...source.characterScale },
     fill: cloneFill(source.fill),
@@ -56,11 +58,16 @@ export const projectTextDefaultsEqual = (left: ProjectTextDefaults, right: Proje
 export const withProjectTextDefaults = (
   base: TextDesignDefaults,
   defaults: ProjectTextDefaults,
-): TextDesignDefaults => ({
-  ...cloneTextDesignDefaults(base),
-  ...cloneProjectTextDefaults(defaults),
-  partialStyles: [],
-  locked: false,
-  fullyLocked: false,
-  visible: true,
-});
+): TextDesignDefaults => {
+  const baseDefaults = cloneTextDesignDefaults(base);
+  const { rotation = 0, ...appearance } = cloneProjectTextDefaults(defaults);
+  return {
+    ...baseDefaults,
+    ...appearance,
+    transform: { ...baseDefaults.transform, scaleX: 1, scaleY: 1, rotation },
+    partialStyles: [],
+    locked: false,
+    fullyLocked: false,
+    visible: true,
+  };
+};

@@ -5,7 +5,6 @@ import { Focus, MoveHorizontal, MoveVertical, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { SegmentedControl } from '@/src/components/controls/SegmentedControl';
-import { SliderField } from '@/src/components/controls/SliderField';
 import { SelectionEmpty } from '@/src/components/panels/SelectionEmpty';
 import { PartialStyleEditor } from '@/src/components/panels/PartialStyleEditor';
 import { LineGapEditor } from '@/src/components/panels/LineGapEditor';
@@ -94,13 +93,12 @@ export function TextPanel() {
         <SegmentedControl label="文字揃え" value={selected.typography.textAlign} options={ALIGN_OPTIONS} onChange={(textAlign) => editor.commit((object) => ({ ...object, typography: { ...object.typography, textAlign } }))} />
       </section>
       <section className="panel-section">
-        <div className="section-heading"><div><h2>配置</h2><p>Canvas中央揃えと回転</p></div></div>
+        <div className="section-heading"><div><h2>配置</h2><p>Canvas内の位置を整えます</p></div></div>
         <fieldset className="grid grid-cols-3 gap-2" aria-label="キャンバス中央揃え">
           <Button type="button" variant="outline" className="h-auto min-w-0 flex-col gap-1 px-1 py-2 text-xs" disabled={selected.locked} onClick={() => centerSelectedOnCanvas('horizontal')}><MoveHorizontal aria-hidden="true" />水平中央</Button>
           <Button type="button" variant="outline" className="h-auto min-w-0 flex-col gap-1 px-1 py-2 text-xs" disabled={selected.locked} onClick={() => centerSelectedOnCanvas('vertical')}><MoveVertical aria-hidden="true" />垂直中央</Button>
           <Button type="button" variant="outline" className="h-auto min-w-0 flex-col gap-1 px-1 py-2 text-xs" disabled={selected.locked} onClick={() => centerSelectedOnCanvas('both')}><Focus aria-hidden="true" />完全中央</Button>
         </fieldset>
-        <SliderField label="グループの回転" value={selected.transform.rotation} min={-180} max={180} unit="°" onBegin={editor.begin} onPreview={(rotation) => editor.preview((object) => ({ ...object, transform: { ...object.transform, rotation } }))} onCommit={editor.finish} />
       </section>
     </>}
   </div>;
