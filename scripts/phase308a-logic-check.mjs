@@ -36,6 +36,8 @@ try {
   const globalCss = await readFile('app/globals.css', 'utf8');
   const keyboardShortcuts = await readFile('src/hooks/useKeyboardShortcuts.ts', 'utf8');
   const historyShortcuts = await readFile('src/services/historyShortcuts.ts', 'utf8');
+  const quickPartialPresets = await readFile('src/services/quickPartialPresets.ts', 'utf8');
+  const partialHorizontalPosition = await readFile('src/services/partialHorizontalPosition.ts', 'utf8');
   assert.match(renderer, /drawLeft = left \+ \(declaration\.deltaX \?\? 0\)/);
   assert.match(renderer, /box\.left \+ deltaX - weightAdjust/);
   assert.match(renderer, /strokeStyle = context\.fillStyle/);
@@ -96,6 +98,35 @@ try {
   assert.equal(historyShortcuts.includes('event.stopPropagation();'), true);
   assert.equal(toolbar.includes('onClick={performUndo}'), true);
   assert.equal(toolbar.includes('onClick={performRedo}'), true);
+  assert.equal(quickPartialPresets.includes('delete cloned.fontSize'), true);
+  assert.equal(quickPartialPresets.includes('const style = cloneStyle(operation.style)'), true);
+  assert.equal(partialStyleEditor.includes('style.fontSize ='), false);
+  assert.equal(partialStyleEditor.includes('style.glyphOffsetX = glyphOffsetX.value'), true);
+  assert.equal(partialStyleEditor.includes('measureGraphicTextHorizontalGeometry(selected, start, end)'), true);
+  const horizontalControl = partialStyleEditor.slice(
+    partialStyleEditor.indexOf("option('glyphOffsetX'"),
+    partialStyleEditor.indexOf("numeric('glyphOffsetY'"),
+  );
+  assert.equal(horizontalControl.includes('min={-100}'), false);
+  assert.equal(horizontalControl.includes('getDynamicGlyphOffsetXRange'), false);
+  assert.equal(horizontalControl.includes('左端へ'), true);
+  assert.equal(horizontalControl.includes('中央へ'), true);
+  assert.equal(horizontalControl.includes('右端へ'), true);
+  assert.equal(horizontalControl.includes('range-horizontal-actions'), true);
+  assert.match(globalCss, /\.range-horizontal-actions\s*\{\s*margin-top:\s*8px;\s*\}/);
+  assert.match(graphicRenderer, /measureGraphicTextHorizontalGeometry/);
+  assert.match(graphicRenderer, /measurementText\.getCharacterLayout\(graphemeIndex\)/);
+  assert.match(graphicRenderer, /delete referenceRange\.glyphOffsetX/);
+  assert.match(graphicRenderer, /measureHorizontalGlyphLayouts\(referenceModel\)/);
+  assert.match(graphicRenderer, /measureHorizontalGlyphLayouts\(model\)/);
+  assert.match(graphicRenderer, /padding: 3,/);
+  assert.doesNotMatch(graphicRenderer, /padding: 3 \+ glyphOffsetPadding/);
+  assert.match(graphicRenderer, /textGroup\.inkPadding[\s\S]*glyphOffsetPadding \* 2/);
+  assert.match(partialHorizontalPosition, /referenceGlyphs: GlyphHorizontalLayout\[\]/);
+  assert.match(partialHorizontalPosition, /renderedGlyphs: GlyphHorizontalLayout\[\]/);
+  assert.match(partialHorizontalPosition, /shiftRangeNumericLeaf\(model\.partialStyles, start, end, 'glyphOffsetX', delta, 0\)/);
+  assert.match(backgroundRenderer, /style\.imageMode === 'followLines'/);
+  assert.match(backgroundRenderer, /renderer\(style, textWidth \+ style\.paddingX \* 2, textHeight \+ style\.paddingY \* 2\)/);
 
   const textSectionOrder = [
     '<h2>本文入力</h2>',
@@ -159,6 +190,10 @@ try {
       'non-overlapping responsive brand region',
       'inline SVG brand mark',
       'single-step shared Undo/Redo keyboard commands',
+      'font-size-free Quick Partial Presets',
+      'dynamic glyphOffsetX visual range and alignment',
+      'stable glyphOffsetX reference bounds and interaction frame',
+      'partial horizontal control spacing',
     ],
   }, null, 2));
 } finally {

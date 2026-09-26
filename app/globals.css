@@ -454,6 +454,7 @@ button, input, textarea, select { font: inherit; }
 .bold-toggle { width: 100%; margin-top: 12px; }
 
 .slider-field { margin-top: 17px; }
+.range-horizontal-actions { margin-top: 8px; }
 .slider-field [data-slot='slider'] { padding: 8px 1px; }
 .slider-field [data-slot='slider-track'] { height: 5px; background: #dde3ed; }
 .slider-field [data-slot='slider-range'] { background: #2f67dc; }

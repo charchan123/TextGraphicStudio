@@ -4,6 +4,11 @@ import { Group, Shadow, util, type FabricObject } from 'fabric';
 import { resolveFontStack } from '@/src/constants/editor';
 import { createTextBackground } from '@/src/canvas/backgroundRenderer';
 import { applyTextRanges, StyledGraphicText } from '@/src/canvas/StyledGraphicText';
+import {
+  calculateTextRangeHorizontalGeometry,
+  type GlyphHorizontalLayout,
+  type PartialHorizontalGeometry,
+} from '@/src/services/partialHorizontalPosition';
 import type { GraphicTextObject } from '@/src/types/editor';
 import { effectiveStrokesAt } from '@/src/services/strokes';
 
@@ -76,6 +81,57 @@ const createTextLayer = (
     || Object.values(model.characterScale).some((scale) => Math.abs(scale - 1) > 0.0001);
   applyTextRanges(text, model);
   return text;
+};
+
+const measureHorizontalGlyphLayouts = (model: GraphicTextObject): GlyphHorizontalLayout[] => {
+  const measurementText = createTextLayer(model, undefined, 0, undefined);
+  try {
+    const shear = Math.tan((measurementText.skewX ?? 0) * Math.PI / 180);
+    const graphemes = util.string.graphemeSplit(model.text.replace(/\r\n?/g, '\n'));
+    const glyphs: GlyphHorizontalLayout[] = [];
+    let offset = 0;
+    graphemes.forEach((grapheme, graphemeIndex) => {
+      const glyphStart = offset;
+      offset += grapheme.length;
+      if (grapheme === '\n') return;
+      const layout = measurementText.getCharacterLayout(graphemeIndex);
+      if (!layout) return;
+      const topShift = shear * layout.top;
+      const bottomShift = shear * (layout.top + layout.height);
+      glyphs.push({
+        start: glyphStart,
+        end: offset,
+        left: layout.left + Math.min(topShift, bottomShift),
+        right: layout.left + layout.width + Math.max(topShift, bottomShift),
+      });
+    });
+    return glyphs;
+  } finally {
+    measurementText.dispose();
+  }
+};
+
+/** Measure a stable layout reference and the current rendered selection with Fabric's shared glyph geometry. */
+export const measureGraphicTextHorizontalGeometry = (
+  model: GraphicTextObject,
+  start: number,
+  end: number,
+): PartialHorizontalGeometry | null => {
+  if (typeof document === 'undefined' || start < 0 || start >= end || end > model.text.length) return null;
+  const referenceModel: GraphicTextObject = {
+    ...model,
+    partialStyles: model.partialStyles.map((range) => {
+      const referenceRange = { ...range };
+      delete referenceRange.glyphOffsetX;
+      return referenceRange;
+    }),
+  };
+  return calculateTextRangeHorizontalGeometry(
+    measureHorizontalGlyphLayouts(referenceModel),
+    measureHorizontalGlyphLayouts(model),
+    start,
+    end,
+  );
 };
 
 export const createFabricGraphicText = (model: GraphicTextObject): RenderedGraphicText => {
@@ -182,7 +238,7 @@ export const createFabricGraphicText = (model: GraphicTextObject): RenderedGraph
     transparentCorners: false,
     borderColor: '#2F6FED',
     borderScaleFactor: 2,
-    padding: 3 + glyphOffsetPadding,
+    padding: 3,
   });
   group.setControlsVisibility({ ml: false, mr: false, mt: false, mb: false });
   group.setCoords();

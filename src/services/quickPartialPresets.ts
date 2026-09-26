@@ -16,10 +16,16 @@ import type {
 
 export const MAX_QUICK_PARTIAL_PRESETS = 8;
 
-const cloneStyle = (style: QuickPartialStyleOperation['style']): QuickPartialStyleOperation['style'] => ({
-  ...style,
-  ...(style.fill ? { fill: cloneFill(style.fill) } : {}),
-});
+const cloneStyle = (style: QuickPartialStyleOperation['style']): QuickPartialStyleOperation['style'] => {
+  const cloned = {
+    ...style,
+    ...(style.fill ? { fill: cloneFill(style.fill) } : {}),
+  };
+  // fontSize remains accepted by validation so legacy presets can load, but it is
+  // never retained or applied by Quick Partial Preset.
+  delete cloned.fontSize;
+  return cloned;
+};
 
 export const cloneQuickPartialOperation = (operation: QuickPartialStyleOperation): QuickPartialStyleOperation => ({
   style: cloneStyle(operation.style),
@@ -38,7 +44,7 @@ export const cloneQuickPartialPreset = (preset: QuickPartialPreset): QuickPartia
 });
 
 export const hasQuickPartialOperation = (operation: QuickPartialStyleOperation): boolean =>
-  Object.keys(operation.style).length > 0
+  Object.keys(cloneStyle(operation.style)).length > 0
   || Boolean(operation.strokes && Object.values(operation.strokes).some((layer) => layer && Object.keys(layer).length > 0));
 
 const compactStrokeOperation = (edit: PartialStrokeEdits[StrokeLayerKey]): QuickPartialStrokeOperation | null => {
@@ -100,8 +106,9 @@ export const applyQuickPartialOperation = (
   if (start >= end || end > model.text.length || !hasQuickPartialOperation(operation)) return model;
   const strokeEdits = expandStrokeEdits(model, start, end, operation.strokes);
   const withStrokes = applyPartialStrokeEdits(model.partialStyles, start, end, strokeEdits);
-  const hasStyle = Object.keys(operation.style).length > 0;
-  const rangeStyle: PartialTextStyle = { start, end, ...cloneStyle(operation.style) };
+  const style = cloneStyle(operation.style);
+  const hasStyle = Object.keys(style).length > 0;
+  const rangeStyle: PartialTextStyle = { start, end, ...style };
   return {
     ...model,
     partialStyles: hasStyle ? [...withStrokes, rangeStyle] : withStrokes,

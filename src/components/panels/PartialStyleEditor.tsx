@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
@@ -8,6 +8,7 @@ import { ColorField } from '@/src/components/controls/ColorField';
 import { SliderField } from '@/src/components/controls/SliderField';
 import { FontFamilySelect } from '@/src/components/FontPicker';
 import { useObjectEditor } from '@/src/hooks/useObjectEditor';
+import { useClientHydrated } from '@/src/hooks/useClientHydrated';
 import {
   clearRangeStyleLeaf,
   clearRangeStyles,
@@ -16,11 +17,19 @@ import {
   shiftRangeNumericLeaf,
   type PartialStyleLeaf,
 } from '@/src/services/partialStyles';
-import type { FillStyle, GraphicTextObject, PartialTextStyle } from '@/src/types/editor';
+import type { FillStyle, GraphicTextObject, QuickPartialStyleOperation } from '@/src/types/editor';
 import { PartialStrokeEditor } from '@/src/components/panels/StrokeEditor';
 import { createPartialStrokeEdits, getRangeStrokeOverrideState, strokeLayersInRange, STROKE_KEYS } from '@/src/services/strokes';
 import { QuickPartialPresets } from '@/src/components/panels/QuickPartialPresets';
 import { createQuickPartialOperation } from '@/src/services/quickPartialPresets';
+import { measureGraphicTextHorizontalGeometry } from '@/src/canvas/graphicTextRenderer';
+import {
+  getDynamicGlyphOffsetXRange,
+  getPartialHorizontalAlignmentDelta,
+  shiftGraphicTextRangeX,
+  type PartialHorizontalAlignment,
+  type PartialHorizontalGeometry,
+} from '@/src/services/partialHorizontalPosition';
 
 const stateLabel = (presence: 'none' | 'all' | 'mixed'): string => presence === 'mixed' ? '（混在）' : '';
 
@@ -44,6 +53,11 @@ export function PartialStyleEditor({
   const mixedXDelta = mixedXState.key === selectionKey ? mixedXState.value : 0;
   const xBaseStylesRef = useRef(selected.partialStyles);
   const xStartValueRef = useRef(0);
+  const hydrated = useClientHydrated();
+  const horizontalGeometry = useMemo<PartialHorizontalGeometry | null>(
+    () => hydrated && valid ? measureGraphicTextHorizontalGeometry(selected, start, end) : null,
+    [end, hydrated, selected, start, valid],
+  );
 
   const fill = getRangeOverrideState(selected.partialStyles, start, end, 'fill');
   const size = getRangeOverrideState(selected.partialStyles, start, end, 'fontSize');
@@ -83,9 +97,8 @@ export function PartialStyleEditor({
     </div>;
   };
 
-  const style: Omit<PartialTextStyle, 'start' | 'end' | 'strokes' | 'glyphOffsetX' | 'glyphOffsetY'> = {};
+  const style: QuickPartialStyleOperation['style'] = {};
   if (fill.presence === 'all' && fill.value) style.fill = fill.value;
-  if (size.presence === 'all') style.fontSize = size.value;
   if (spacing.presence === 'all') style.letterSpacing = spacing.value;
   if (glyphWidth.presence === 'all') style.glyphScaleX = glyphWidth.value;
   if (glyphHeight.presence === 'all') style.glyphScaleY = glyphHeight.value;
@@ -95,6 +108,7 @@ export function PartialStyleEditor({
     style.fontFamily = font.value;
     if (fontRef.presence === 'all') style.fontRefId = fontRef.value;
   }
+  if (glyphOffsetX.presence === 'all') style.glyphOffsetX = glyphOffsetX.value;
   const strokeEdits = createPartialStrokeEdits(selected, start, end);
   STROKE_KEYS.forEach((key) => {
     const enabled = getRangeStrokeOverrideState(selected.partialStyles, start, end, key, 'enabled');
@@ -108,6 +122,17 @@ export function PartialStyleEditor({
   const validStrokes = strokeLayersInRange(selected, start, end)
     .every((layers) => (!layers[1].enabled || layers[0].enabled) && (!layers[2].enabled || layers[1].enabled));
   const currentFill: FillStyle = fill.value ?? selected.fill;
+  const xSliderValue = glyphOffsetX.presence === 'mixed' ? mixedXDelta : Number(glyphOffsetX.value ?? 0);
+  const xRange = horizontalGeometry
+    ? getDynamicGlyphOffsetXRange(horizontalGeometry, xSliderValue)
+    : { min: xSliderValue, max: xSliderValue };
+  const horizontalDisabled = !valid || selected.fullyLocked || !horizontalGeometry;
+  const alignSelection = (alignment: PartialHorizontalAlignment) => {
+    if (!horizontalGeometry || horizontalDisabled) return;
+    const delta = getPartialHorizontalAlignmentDelta(horizontalGeometry, alignment);
+    if (Math.abs(delta) < 0.0001) return;
+    editor.commit((object) => shiftGraphicTextRangeX(object, start, end, delta));
+  };
 
   const numeric = (
     leaf: PartialStyleLeaf, label: string, state: typeof size, fallback: number,
@@ -219,10 +244,11 @@ export function PartialStyleEditor({
       {glyphOffsetX.presence === 'mixed' && <p className="panel-note">現在値：混在（入力値を全glyphへ差分加算）</p>}
       <SliderField
         label="文字の左右位置"
-        value={glyphOffsetX.presence === 'mixed' ? mixedXDelta : Number(glyphOffsetX.value ?? 0)}
-        min={-100}
-        max={100}
+        value={xSliderValue}
+        min={xRange.min}
+        max={xRange.max}
         unit="px"
+        disabled={horizontalDisabled || xRange.min === xRange.max}
         onBegin={() => { xBaseStylesRef.current = selected.partialStyles; xStartValueRef.current = mixedXDelta; editor.begin(); }}
         onPreview={(value) => {
           setMixedXState({ key: selectionKey, value });
@@ -234,8 +260,13 @@ export function PartialStyleEditor({
         }}
         onCommit={() => { editor.finish(); setMixedXState({ key: selectionKey, value: 0 }); }}
       />
-      <p className="panel-note">＋で右、－で左へ移動します。文字送りと改行位置は変わりません。</p>
     </>}
+    <div className="range-horizontal-actions grid grid-cols-3 gap-2" aria-label="選択範囲の横位置を揃える">
+      <Button type="button" size="sm" variant="outline" disabled={horizontalDisabled} onClick={() => alignSelection('left')}>左端へ</Button>
+      <Button type="button" size="sm" variant="outline" disabled={horizontalDisabled} onClick={() => alignSelection('center')}>中央へ</Button>
+      <Button type="button" size="sm" variant="outline" disabled={horizontalDisabled} onClick={() => alignSelection('right')}>右端へ</Button>
+    </div>
+    <p className="panel-note">移動可能範囲：{Math.max(0, xRange.max - xRange.min)}px。文字送りと改行位置は変わりません。</p>
     {numeric('glyphOffsetY', '文字の上下位置', glyphOffsetY, 0, -100, 100, 'px')}
 
     <PartialStrokeEditor selected={selected} start={start} end={end} />

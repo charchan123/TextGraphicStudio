@@ -6,7 +6,13 @@ import {
   setRangeStyleLeaf,
   shiftRangeNumericLeaf,
 } from '@/src/services/partialStyles';
-import { applyQuickPartialOperation } from '@/src/services/quickPartialPresets';
+import { applyQuickPartialOperation, cloneQuickPartialOperation } from '@/src/services/quickPartialPresets';
+import {
+  calculateTextRangeHorizontalGeometry,
+  getDynamicGlyphOffsetXRange,
+  getPartialHorizontalAlignmentDelta,
+  shiftGraphicTextRangeX,
+} from '@/src/services/partialHorizontalPosition';
 import { createTextDefaultsFile, parseTextDefaultsFile, readTextDefaultsFile } from '@/src/services/textDefaultsFileService';
 import { normalizeStudioProject } from '@/src/services/studioProject';
 import { toProjectTextDefaults } from '@/src/services/textDefaults';
@@ -100,6 +106,45 @@ assert.equal(getRangeOverrideState(shifted, 1, 2, 'glyphOffsetX').value, -15);
 assert.equal(getRangeOverrideState(shifted, 0, 2, 'glyphOffsetX').presence, 'mixed');
 const xy = setRangeStyleLeaf(shifted, 0, 2, 'glyphOffsetY', 8);
 assert.equal(getRangeOverrideState(xy, 0, 2, 'glyphOffsetY').value, 8);
+
+const referenceGlyphs = [
+  { start: 0, end: 1, left: -300, right: -250 },
+  { start: 1, end: 2, left: 0, right: 40 },
+  { start: 2, end: 3, left: 50, right: 100 },
+  { start: 3, end: 4, left: 450, right: 500 },
+];
+const renderedGlyphs = [
+  referenceGlyphs[0],
+  { start: 1, end: 2, left: 180, right: 220 },
+  { start: 2, end: 3, left: 230, right: 280 },
+  referenceGlyphs[3],
+];
+const horizontalGeometry = calculateTextRangeHorizontalGeometry(referenceGlyphs, renderedGlyphs, 1, 3)!;
+assert.deepEqual(horizontalGeometry.reference, { left: -300, right: 500 });
+assert.deepEqual(horizontalGeometry.selection, { left: 180, right: 280 });
+assert.equal(getPartialHorizontalAlignmentDelta(horizontalGeometry, 'left'), -480);
+assert.equal(getPartialHorizontalAlignmentDelta(horizontalGeometry, 'center'), -130);
+assert.equal(getPartialHorizontalAlignmentDelta(horizontalGeometry, 'right'), 220);
+const stableRange = getDynamicGlyphOffsetXRange(horizontalGeometry, 150);
+assert.deepEqual(stableRange, { min: -330, max: 370 });
+assert.ok(stableRange.max - stableRange.min > 200);
+
+const moveSelection = (delta: number) => renderedGlyphs.map((glyph, index) => index === 1 || index === 2
+  ? { ...glyph, left: glyph.left + delta, right: glyph.right + delta }
+  : glyph);
+const rightAlignedGeometry = calculateTextRangeHorizontalGeometry(referenceGlyphs, moveSelection(220), 1, 3)!;
+assert.deepEqual(rightAlignedGeometry.reference, horizontalGeometry.reference);
+assert.equal(rightAlignedGeometry.selection.right, rightAlignedGeometry.reference.right);
+assert.equal(getPartialHorizontalAlignmentDelta(rightAlignedGeometry, 'right'), 0);
+assert.deepEqual(getDynamicGlyphOffsetXRange(rightAlignedGeometry, 370), stableRange);
+const leftAlignedGeometry = calculateTextRangeHorizontalGeometry(referenceGlyphs, moveSelection(-480), 1, 3)!;
+assert.equal(leftAlignedGeometry.selection.left, leftAlignedGeometry.reference.left);
+assert.deepEqual(getDynamicGlyphOffsetXRange(leftAlignedGeometry, -330), stableRange);
+const centeredGeometry = calculateTextRangeHorizontalGeometry(referenceGlyphs, moveSelection(-130), 1, 3)!;
+assert.equal(
+  (centeredGeometry.selection.left + centeredGeometry.selection.right) / 2,
+  (centeredGeometry.reference.left + centeredGeometry.reference.right) / 2,
+);
 
 const state = () => useEditorStore.getState();
 const seeded = {
@@ -199,8 +244,14 @@ assert.equal(getRangeOverrideState(state().project.objects[0].partialStyles, 0, 
 assert.equal(state().project.objects[0].typography.fontWeightAdjust, 6);
 assert.equal(JSON.stringify(state().studioProject.projectTextDefaults), defaultsBeforePartial);
 
-const withPreset = applyQuickPartialOperation(state().project.objects[0], 0, 2, { style: { fontSize: 155 } });
-assert.equal(getRangeOverrideState(withPreset.partialStyles, 0, 2, 'fontSize').value, 155);
+const legacyPresetOperation = { style: { fontSize: 155, fill: fillRed, glyphOffsetX: -20 } };
+const normalizedPresetOperation = cloneQuickPartialOperation(legacyPresetOperation);
+assert.equal('fontSize' in normalizedPresetOperation.style, false);
+assert.equal(normalizedPresetOperation.style.glyphOffsetX, -20);
+const withPreset = applyQuickPartialOperation(state().project.objects[0], 0, 2, legacyPresetOperation);
+assert.equal(getRangeOverrideState(withPreset.partialStyles, 0, 2, 'fontSize').value, 130);
+assert.equal(getRangeOverrideState(withPreset.partialStyles, 0, 2, 'glyphOffsetX').value, -20);
+assert.deepEqual(getRangeOverrideState(withPreset.partialStyles, 0, 2, 'fill').value, fillRed);
 
 const pastCount = state().past.length;
 state().beginTransaction();
@@ -209,6 +260,21 @@ state().updateObject(firstId, (object) => ({ ...object, partialStyles: setRangeS
 state().finishTransaction();
 assert.equal(state().past.length, pastCount + 1);
 assert.equal(getRangeOverrideState(state().project.objects[0].partialStyles, 0, 2, 'fontSize').value, 170);
+
+state().setTextSelection(heldSelection);
+state().updateObject(firstId, (object) => {
+  let partialStyles = setRangeStyleLeaf(object.partialStyles, 0, 1, 'glyphOffsetX', -10);
+  partialStyles = setRangeStyleLeaf(partialStyles, 1, 2, 'glyphOffsetX', -20);
+  return { ...object, partialStyles };
+});
+const horizontalPastCount = state().past.length;
+const horizontalText = state().project.objects[0].text;
+state().updateObject(firstId, (object) => shiftGraphicTextRangeX(object, 0, 2, -15));
+assert.equal(state().past.length, horizontalPastCount + 1);
+assert.deepEqual(state().textSelection, heldSelection);
+assert.equal(state().project.objects[0].text, horizontalText);
+assert.equal(getRangeOverrideState(state().project.objects[0].partialStyles, 0, 1, 'glyphOffsetX').value, -25);
+assert.equal(getRangeOverrideState(state().project.objects[0].partialStyles, 1, 2, 'glyphOffsetX').value, -35);
 
 state().setTextSelection(heldSelection);
 state().updateObject(firstId, (object) => ({ ...object, text: object.text + '!' }));
@@ -370,4 +436,4 @@ state().updateObject(state().project.objects[0].id, (object) => ({
 }));
 assert.equal(JSON.stringify(state().studioProject.projectTextDefaults), lockedDefaults);
 
-console.log(JSON.stringify({ passed: true, checks: 101 }, null, 2));
+console.log(JSON.stringify({ passed: true, checks: 139 }, null, 2));

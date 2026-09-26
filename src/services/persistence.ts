@@ -1,6 +1,6 @@
 import type { BackgroundPreset, ProjectDocument, QuickPartialPreset, QuickPartialStyleOperation, StudioProject, TextDesignDefaults } from '@/src/types/editor';
 import { normalizeProjectDocument, normalizeTextBackground } from '@/src/services/documentData';
-import { cloneQuickPartialPreset, hasQuickPartialOperation, MAX_QUICK_PARTIAL_PRESETS } from '@/src/services/quickPartialPresets';
+import { cloneQuickPartialPreset, MAX_QUICK_PARTIAL_PRESETS } from '@/src/services/quickPartialPresets';
 import { toTextDesignDefaults } from '@/src/services/textDefaults';
 import { isStrokeLayers } from '@/src/services/styleValidation';
 import { bounded, isColorPalette, isFillStyle, isFontReference, isPartialTextStyle, isProjectTextDefaults, isSafeFontText, isTextBackground } from '@/src/services/styleValidation';
@@ -167,8 +167,7 @@ const isQuickPartialPreset = (value: unknown): value is QuickPartialPreset => is
   && isSafeFontText(value.id)
   && typeof value.name === 'string' && value.name.trim().length > 0 && value.name.length <= 40
   && typeof value.createdAt === 'string' && typeof value.updatedAt === 'string'
-  && isQuickPartialOperation(value.operation)
-  && hasQuickPartialOperation(value.operation);
+  && isQuickPartialOperation(value.operation);
 
 export const saveQuickPartialPresets = async (presets: QuickPartialPreset[]): Promise<void> => {
   await runRequest('readwrite', (store) => store.put({
