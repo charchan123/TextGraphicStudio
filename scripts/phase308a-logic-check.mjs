@@ -34,6 +34,8 @@ try {
   const editorApp = await readFile('src/components/EditorApp.tsx', 'utf8');
   const fontPicker = await readFile('src/components/FontPicker.tsx', 'utf8');
   const globalCss = await readFile('app/globals.css', 'utf8');
+  const keyboardShortcuts = await readFile('src/hooks/useKeyboardShortcuts.ts', 'utf8');
+  const historyShortcuts = await readFile('src/services/historyShortcuts.ts', 'utf8');
   assert.match(renderer, /drawLeft = left \+ \(declaration\.deltaX \?\? 0\)/);
   assert.match(renderer, /box\.left \+ deltaX - weightAdjust/);
   assert.match(renderer, /strokeStyle = context\.fillStyle/);
@@ -83,6 +85,17 @@ try {
   assert.equal(fontPicker.includes('PCフォント一覧を再読み込み'), true);
   assert.equal(fontPicker.includes('新しくインストールしたフォントが表示されない場合はChromeを再起動してください'), true);
   assert.equal(fontPicker.includes('.ttc'), false);
+  assert.equal((keyboardShortcuts.match(/window\.addEventListener\('keydown', onKeyDown\)/g) ?? []).length, 1);
+  assert.equal((keyboardShortcuts.match(/window\.removeEventListener\('keydown', onKeyDown\)/g) ?? []).length, 1);
+  assert.equal(keyboardShortcuts.includes('handleHistoryShortcut(event, { undo: performUndo, redo: performRedo })'), true);
+  assert.equal(keyboardShortcuts.indexOf('handleHistoryShortcut(event') < keyboardShortcuts.indexOf('isEditableTarget(event.target)'), true);
+  assert.equal(keyboardShortcuts.includes('state.undo()'), false);
+  assert.equal(keyboardShortcuts.includes('state.redo()'), false);
+  assert.equal(historyShortcuts.includes('if (event.repeat) return true;'), true);
+  assert.equal(historyShortcuts.includes('event.preventDefault();'), true);
+  assert.equal(historyShortcuts.includes('event.stopPropagation();'), true);
+  assert.equal(toolbar.includes('onClick={performUndo}'), true);
+  assert.equal(toolbar.includes('onClick={performRedo}'), true);
 
   const textSectionOrder = [
     '<h2>本文入力</h2>',
@@ -145,6 +158,7 @@ try {
       'selected PNG default filename normalization',
       'non-overlapping responsive brand region',
       'inline SVG brand mark',
+      'single-step shared Undo/Redo keyboard commands',
     ],
   }, null, 2));
 } finally {

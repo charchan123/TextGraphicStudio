@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 
+import { handleHistoryShortcut, performRedo, performUndo } from '@/src/services/historyShortcuts';
 import { useEditorStore } from '@/src/store/editorStore';
 
 const isEditableTarget = (target: EventTarget | null): boolean => {
@@ -28,24 +29,13 @@ export function useKeyboardShortcuts() {
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
+      if (handleHistoryShortcut(event, { undo: performUndo, redo: performRedo })) return;
+      if (event.defaultPrevented) return;
       if (event.isComposing || isEditableTarget(event.target)) return;
       const state = useEditorStore.getState();
       const commandKey = event.ctrlKey || event.metaKey;
       const key = event.key.toLowerCase();
 
-      if (commandKey && key === 'z') {
-        event.preventDefault();
-        state.finishTransaction();
-        if (event.shiftKey) state.redo();
-        else state.undo();
-        return;
-      }
-      if (commandKey && key === 'y') {
-        event.preventDefault();
-        state.finishTransaction();
-        state.redo();
-        return;
-      }
       if (commandKey && key === 'd') {
         event.preventDefault();
         state.finishTransaction();

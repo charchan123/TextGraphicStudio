@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { CanvasSizeControl } from '@/src/components/CanvasSizeControl';
 import { ToolbarTooltip } from '@/src/components/ToolbarTooltip';
 import { EditorActionButton } from '@/src/components/EditorActionButton';
+import { performRedo, performUndo } from '@/src/services/historyShortcuts';
 import { useEditorStore } from '@/src/store/editorStore';
 import type { StoryboardPlacement } from '@/src/components/Storyboard';
 
@@ -66,8 +67,6 @@ export function EditorToolbar({
   const selectedId = useEditorStore((state) => state.selectedId);
   const pastLength = useEditorStore((state) => state.past.length);
   const futureLength = useEditorStore((state) => state.future.length);
-  const undo = useEditorStore((state) => state.undo);
-  const redo = useEditorStore((state) => state.redo);
   const duplicateSelected = useEditorStore((state) => state.duplicateSelected);
   const deleteObject = useEditorStore((state) => state.deleteObject);
   const hasSelection = project.objects.some((object) => object.id === selectedId);
@@ -114,12 +113,12 @@ export function EditorToolbar({
         />
         <span className="toolbar-divider" aria-hidden="true" />
         <ToolbarTooltip label="元に戻す（Ctrl+Z）">
-          <Button variant="ghost" size="lg" aria-label="元に戻す" disabled={pastLength === 0} onClick={undo}>
+          <Button variant="ghost" size="lg" aria-label="元に戻す" disabled={pastLength === 0} onClick={performUndo}>
             <Undo2 aria-hidden="true" /><span>元に戻す</span>
           </Button>
         </ToolbarTooltip>
         <ToolbarTooltip label="やり直す（Ctrl+Shift+Z / Ctrl+Y）">
-          <Button variant="ghost" size="lg" aria-label="やり直す" disabled={futureLength === 0} onClick={redo}>
+          <Button variant="ghost" size="lg" aria-label="やり直す" disabled={futureLength === 0} onClick={performRedo}>
             <Redo2 aria-hidden="true" /><span>やり直す</span>
           </Button>
         </ToolbarTooltip>

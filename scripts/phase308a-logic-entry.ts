@@ -12,7 +12,57 @@ import { normalizeStudioProject } from '@/src/services/studioProject';
 import { toProjectTextDefaults } from '@/src/services/textDefaults';
 import { getOutputPreviewKeyboardAction, getOutputPreviewTargetIndex } from '@/src/services/outputPreviewNavigation';
 import { graphicPngFileName } from '@/src/services/exportFileNames';
+import { getHistoryShortcutAction, handleHistoryShortcut, performRedo, performUndo } from '@/src/services/historyShortcuts';
 import { useEditorStore } from '@/src/store/editorStore';
+
+const keyboardEvent = (overrides: Partial<KeyboardEvent> = {}) => {
+  let defaultPrevented = false;
+  let propagationStopped = false;
+  const event = {
+    altKey: false,
+    ctrlKey: false,
+    get defaultPrevented() { return defaultPrevented; },
+    isComposing: false,
+    key: '',
+    metaKey: false,
+    preventDefault: () => { defaultPrevented = true; },
+    repeat: false,
+    shiftKey: false,
+    stopPropagation: () => { propagationStopped = true; },
+    target: { kind: 'textarea' },
+    ...overrides,
+  } as unknown as KeyboardEvent;
+  return { event, prevented: () => defaultPrevented, stopped: () => propagationStopped };
+};
+
+assert.equal(getHistoryShortcutAction(keyboardEvent({ ctrlKey: true, key: 'z' }).event), 'undo');
+assert.equal(getHistoryShortcutAction(keyboardEvent({ ctrlKey: true, key: 'Z', shiftKey: true }).event), 'redo');
+assert.equal(getHistoryShortcutAction(keyboardEvent({ ctrlKey: true, key: 'y' }).event), 'redo');
+assert.equal(getHistoryShortcutAction(keyboardEvent({ metaKey: true, key: 'z' }).event), 'undo');
+assert.equal(getHistoryShortcutAction(keyboardEvent({ metaKey: true, key: 'z', shiftKey: true }).event), 'redo');
+assert.equal(getHistoryShortcutAction(keyboardEvent({ ctrlKey: true, altKey: true, key: 'z' }).event), null);
+
+let shortcutUndoCalls = 0;
+let shortcutRedoCalls = 0;
+const shortcutCommands = { undo: () => { shortcutUndoCalls += 1; }, redo: () => { shortcutRedoCalls += 1; } };
+const textareaUndo = keyboardEvent({ ctrlKey: true, key: 'z' });
+assert.equal(handleHistoryShortcut(textareaUndo.event, shortcutCommands), true);
+assert.equal(shortcutUndoCalls, 1);
+assert.equal(textareaUndo.prevented(), true);
+assert.equal(textareaUndo.stopped(), true);
+// The same event cannot be consumed twice even if a listener were accidentally duplicated.
+assert.equal(handleHistoryShortcut(textareaUndo.event, shortcutCommands), false);
+assert.equal(shortcutUndoCalls, 1);
+const repeatedUndo = keyboardEvent({ ctrlKey: true, key: 'z', repeat: true });
+assert.equal(handleHistoryShortcut(repeatedUndo.event, shortcutCommands), true);
+assert.equal(shortcutUndoCalls, 1);
+assert.equal(repeatedUndo.prevented(), true);
+const ctrlY = keyboardEvent({ ctrlKey: true, key: 'y' });
+handleHistoryShortcut(ctrlY.event, shortcutCommands);
+assert.equal(shortcutRedoCalls, 1);
+const ctrlShiftZ = keyboardEvent({ ctrlKey: true, key: 'z', shiftKey: true });
+handleHistoryShortcut(ctrlShiftZ.event, shortcutCommands);
+assert.equal(shortcutRedoCalls, 2);
 
 const fillRed = { type: 'solid' as const, color: '#FF0000' };
 assert.equal(getOutputPreviewKeyboardAction('ArrowLeft'), 'previous');
@@ -61,6 +111,24 @@ state().createNewProject();
 assert.equal(state().studioProject.projectTextDefaults?.typography.fontSize, 123);
 assert.equal(state().project.objects[0].typography.fontWeightAdjust, 4);
 assert.equal(state().project.objects[0].text, 'ここにテキストを入力してください。');
+
+const historyObjectId = state().project.objects[0].id;
+const historyPositionA = state().project.objects[0].position.x;
+for (const positionX of [historyPositionA + 1, historyPositionA + 2, historyPositionA + 3]) {
+  state().updateObject(historyObjectId, (object) => ({ ...object, position: { ...object.position, x: positionX } }));
+}
+performUndo();
+assert.equal(state().project.objects[0].position.x, historyPositionA + 2);
+performRedo();
+assert.equal(state().project.objects[0].position.x, historyPositionA + 3);
+handleHistoryShortcut(keyboardEvent({ ctrlKey: true, key: 'z' }).event);
+assert.equal(state().project.objects[0].position.x, historyPositionA + 2);
+handleHistoryShortcut(keyboardEvent({ ctrlKey: true, key: 'z' }).event);
+assert.equal(state().project.objects[0].position.x, historyPositionA + 1);
+handleHistoryShortcut(keyboardEvent({ ctrlKey: true, key: 'y' }).event);
+assert.equal(state().project.objects[0].position.x, historyPositionA + 2);
+handleHistoryShortcut(keyboardEvent({ ctrlKey: true, key: 'z', shiftKey: true }).event);
+assert.equal(state().project.objects[0].position.x, historyPositionA + 3);
 
 const firstId = state().project.objects[0].id;
 const activeFrameId = state().studioProject.activeFrameId;
@@ -302,4 +370,4 @@ state().updateObject(state().project.objects[0].id, (object) => ({
 }));
 assert.equal(JSON.stringify(state().studioProject.projectTextDefaults), lockedDefaults);
 
-console.log(JSON.stringify({ passed: true, checks: 77 }, null, 2));
+console.log(JSON.stringify({ passed: true, checks: 101 }, null, 2));
