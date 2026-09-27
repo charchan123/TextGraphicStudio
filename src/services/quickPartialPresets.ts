@@ -21,6 +21,11 @@ const cloneStyle = (style: QuickPartialStyleOperation['style']): QuickPartialSty
     ...style,
     ...(style.fill ? { fill: cloneFill(style.fill) } : {}),
   };
+  if (cloned.fontWeightAdjust !== undefined) {
+    cloned.fontWeightAdjust = Number.isFinite(cloned.fontWeightAdjust)
+      ? Math.min(16, Math.max(0, cloned.fontWeightAdjust))
+      : 0;
+  }
   // fontSize remains accepted by validation so legacy presets can load, but it is
   // never retained or applied by Quick Partial Preset.
   delete cloned.fontSize;

@@ -137,11 +137,11 @@ export const measureGraphicTextHorizontalGeometry = (
 export const createFabricGraphicText = (model: GraphicTextObject): RenderedGraphicText => {
   const children: FabricObject[] = [];
   const glyphOffsetPadding = Math.max(
-    model.typography.fontWeightAdjust ?? 0,
+    Math.max(0, model.typography.fontWeightAdjust ?? 0),
     ...model.partialStyles.map((range) => Math.max(
       Math.abs(range.glyphOffsetX ?? 0),
       Math.abs(range.glyphOffsetY ?? 0),
-      range.fontWeightAdjust ?? model.typography.fontWeightAdjust ?? 0,
+      Math.max(0, range.fontWeightAdjust ?? model.typography.fontWeightAdjust ?? 0),
     )),
   );
   const shadow = model.shadow.enabled

@@ -73,7 +73,7 @@ export class StyledGraphicText extends FabricText {
   }
 
   setFontWeightAdjust(value: number): void {
-    this.baseFontWeightAdjust = value;
+    this.baseFontWeightAdjust = Number.isFinite(value) ? Math.min(16, Math.max(0, value)) : 0;
   }
 
   setLineGapOffsets(offsets: readonly number[]): void {
@@ -94,7 +94,8 @@ export class StyledGraphicText extends FabricText {
 
   private weightAdjustAt(line: number, character: number): number {
     const declaration = this._getStyleDeclaration(line, character) as RangeDeclaration;
-    return declaration.fontWeightAdjust ?? this.baseFontWeightAdjust ?? 0;
+    const value = declaration.fontWeightAdjust ?? this.baseFontWeightAdjust ?? 0;
+    return Number.isFinite(value) ? Math.min(16, Math.max(0, value)) : 0;
   }
 
   override _getGraphemeBox(...args: Parameters<FabricText['_getGraphemeBox']>) {

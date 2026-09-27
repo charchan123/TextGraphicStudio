@@ -50,6 +50,14 @@ try {
   assert.match(renderer, /box\.left \+ deltaX - weightAdjust/);
   assert.match(renderer, /strokeStyle = context\.fillStyle/);
   assert.match(renderer, /strokeWidth: Number\(complete\.strokeWidth \?\? 0\) \+ weightAdjust \* 2/);
+  assert.doesNotMatch(renderer, /renderOpticallyThinnedFill/);
+  assert.doesNotMatch(renderer, /globalCompositeOperation = 'destination-out'/);
+  assert.doesNotMatch(renderer, /weightAdjust < 0/);
+  assert.match(graphicRenderer, /\|\| \(model\.typography\.fontWeightAdjust \?\? 0\) > 0/);
+  assert.match(styleValidation, /bounded\(fontWeightAdjust, 0, 16\)/);
+  assert.match(stylePanel, /label="文字の太さ補正"[\s\S]*min=\{0\} max=\{16\}/);
+  assert.match(partialStyleEditor, /selected\.typography\.fontWeightAdjust \?\? 0, 0, 16, 'px'/);
+  assert.doesNotMatch(stylePanel, /マイナスで細く/);
   assert.match(graphicRenderer, /range\.glyphOffsetX !== undefined \|\| range\.fontWeightAdjust !== undefined/);
   assert.match(backgroundRenderer, /createFollowLinesBackground\(style, lines, lineIds, outputScale\)/);
   assert.match(backgroundRenderer, /drawHorizontalThreeSlice/);
@@ -255,6 +263,7 @@ try {
       'beforeinput metadata capture without native edit prevention',
       'ID-keyed renderer lookup and text-edit atomicity',
       'blank logical-line renderer mapping without adjustment leakage',
+      'negative font-weight rollback with positive-only rendering and legacy-data normalization',
     ],
   }, null, 2));
 } finally {

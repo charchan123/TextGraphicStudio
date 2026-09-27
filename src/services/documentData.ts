@@ -24,8 +24,14 @@ export const cloneFill = (fill: FillStyle): FillStyle => fill.type === 'solid'
   ? { ...fill }
   : { ...fill, stops: fill.stops.map((stop) => ({ ...stop })) };
 
+const normalizeFontWeightAdjust = (value: number | undefined): number =>
+  Number.isFinite(value) ? Math.min(16, Math.max(0, value ?? 0)) : 0;
+
 export const clonePartialStyle = (style: PartialTextStyle): PartialTextStyle => ({
   ...style,
+  ...(style.fontWeightAdjust !== undefined
+    ? { fontWeightAdjust: normalizeFontWeightAdjust(style.fontWeightAdjust) }
+    : {}),
   fill: style.fill ? cloneFill(style.fill) : undefined,
   strokes: clonePartialStrokes(style.strokes),
 });
@@ -53,7 +59,10 @@ export const cloneGraphicObject = (object: GraphicTextObject): GraphicTextObject
   position: { ...object.position },
   size: { ...object.size },
   transform: { ...object.transform },
-  typography: { ...object.typography },
+  typography: {
+    ...object.typography,
+    fontWeightAdjust: normalizeFontWeightAdjust(object.typography.fontWeightAdjust),
+  },
   characterScale: { ...object.characterScale },
   lineGapOffsets: [...(object.lineGapOffsets ?? [])],
   fill: cloneFill(object.fill),
@@ -86,7 +95,7 @@ const normalizeObject = (object: GraphicTextObject): GraphicTextObject => {
   textLineIds,
   typography: {
     ...object.typography,
-    fontWeightAdjust: object.typography.fontWeightAdjust ?? 0,
+    fontWeightAdjust: normalizeFontWeightAdjust(object.typography.fontWeightAdjust),
     fontStyle: object.typography.fontStyle ?? 'normal',
     slant: object.typography.slant ?? 0,
     glyphScaleX: object.typography.glyphScaleX ?? 1,
@@ -132,7 +141,7 @@ export const normalizeTemplate = (template: GraphicTextTemplateV1): GraphicTextT
   ...template,
   typography: {
     ...template.typography,
-    fontWeightAdjust: template.typography.fontWeightAdjust ?? 0,
+    fontWeightAdjust: normalizeFontWeightAdjust(template.typography.fontWeightAdjust),
     fontStyle: template.typography.fontStyle ?? 'normal',
     slant: template.typography.slant ?? 0,
     glyphScaleX: template.typography.glyphScaleX ?? 1,

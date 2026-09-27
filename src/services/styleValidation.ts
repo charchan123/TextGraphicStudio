@@ -37,23 +37,32 @@ export const isFillStyle = (value: unknown): value is FillStyle => isRecord(valu
     && value.stops.every((stop) => isRecord(stop) && bounded(stop.offset, 0, 1) && color(stop.color))
 );
 
-export const isPartialTextStyle = (value: unknown): value is PartialTextStyle => isRecord(value)
-  && bounded(value.start, 0, 1000000) && Number.isInteger(value.start)
-  && bounded(value.end, value.start + 1, 1000000) && Number.isInteger(value.end)
-  && (value.fill === undefined || isFillStyle(value.fill))
-  && (value.fontScale === undefined || bounded(value.fontScale, 0.05, 20))
-  && (value.fontSize === undefined || bounded(value.fontSize, 8, 400))
-  && (value.letterSpacing === undefined || bounded(value.letterSpacing, -40, 160))
-  && (value.fontWeight === undefined || value.fontWeight === 400 || value.fontWeight === 700 || value.fontWeight === 900)
-  && (value.fontWeightAdjust === undefined || bounded(value.fontWeightAdjust, 0, 16))
-  && (value.fontFamily === undefined || isSafeFontText(value.fontFamily))
-  && (value.fontRefId === undefined || isSafeFontText(value.fontRefId))
-  && (value.fontStyle === undefined || value.fontStyle === 'normal' || value.fontStyle === 'italic')
-  && (value.glyphScaleX === undefined || bounded(value.glyphScaleX, 0.5, 1.5))
-  && (value.glyphScaleY === undefined || bounded(value.glyphScaleY, 0.5, 1.5))
-  && (value.glyphOffsetY === undefined || bounded(value.glyphOffsetY, -100, 100))
-  && (value.glyphOffsetX === undefined || bounded(value.glyphOffsetX, -100, 100))
-  && (value.strokes === undefined || isPartialStrokes(value.strokes));
+export const isPartialTextStyle = (value: unknown): value is PartialTextStyle => {
+  if (!isRecord(value)) return false;
+  // Phase 3.0.13 Lite may have persisted a negative value. Accept it only so
+  // the normalizers can convert it to 0 instead of rejecting the whole file.
+  const fontWeightAdjust = typeof value.fontWeightAdjust === 'number'
+    && Number.isFinite(value.fontWeightAdjust)
+    && value.fontWeightAdjust < 0
+    ? 0
+    : value.fontWeightAdjust;
+  return bounded(value.start, 0, 1000000) && Number.isInteger(value.start)
+    && bounded(value.end, value.start + 1, 1000000) && Number.isInteger(value.end)
+    && (value.fill === undefined || isFillStyle(value.fill))
+    && (value.fontScale === undefined || bounded(value.fontScale, 0.05, 20))
+    && (value.fontSize === undefined || bounded(value.fontSize, 8, 400))
+    && (value.letterSpacing === undefined || bounded(value.letterSpacing, -40, 160))
+    && (value.fontWeight === undefined || value.fontWeight === 400 || value.fontWeight === 700 || value.fontWeight === 900)
+    && (fontWeightAdjust === undefined || bounded(fontWeightAdjust, 0, 16))
+    && (value.fontFamily === undefined || isSafeFontText(value.fontFamily))
+    && (value.fontRefId === undefined || isSafeFontText(value.fontRefId))
+    && (value.fontStyle === undefined || value.fontStyle === 'normal' || value.fontStyle === 'italic')
+    && (value.glyphScaleX === undefined || bounded(value.glyphScaleX, 0.5, 1.5))
+    && (value.glyphScaleY === undefined || bounded(value.glyphScaleY, 0.5, 1.5))
+    && (value.glyphOffsetY === undefined || bounded(value.glyphOffsetY, -100, 100))
+    && (value.glyphOffsetX === undefined || bounded(value.glyphOffsetX, -100, 100))
+    && (value.strokes === undefined || isPartialStrokes(value.strokes));
+};
 
 const isLineEdgeAdjustment = (value: unknown): boolean => isRecord(value)
   && bounded(value.leftInsetPx, -500, 500)
@@ -94,6 +103,11 @@ const isStrokeStyle = (value: unknown): boolean => isRecord(value)
 export const isProjectTextDefaults = (value: unknown): value is ProjectTextDefaults => {
   if (!isRecord(value) || !isRecord(value.typography) || !isRecord(value.characterScale) || !isRecord(value.shadow)) return false;
   const typography = value.typography;
+  const fontWeightAdjust = typeof typography.fontWeightAdjust === 'number'
+    && Number.isFinite(typography.fontWeightAdjust)
+    && typography.fontWeightAdjust < 0
+    ? 0
+    : typography.fontWeightAdjust;
   const scales = value.characterScale;
   const shadow = value.shadow;
   return isSafeFontText(typography.fontFamily)
@@ -101,7 +115,7 @@ export const isProjectTextDefaults = (value: unknown): value is ProjectTextDefau
     && (typography.fontRefId === undefined || isSafeFontText(typography.fontRefId))
     && bounded(typography.fontSize, 8, 400)
     && (typography.fontWeight === 400 || typography.fontWeight === 700 || typography.fontWeight === 900)
-    && (typography.fontWeightAdjust === undefined || bounded(typography.fontWeightAdjust, 0, 16))
+    && (fontWeightAdjust === undefined || bounded(fontWeightAdjust, 0, 16))
     && (typography.fontStyle === undefined || typography.fontStyle === 'normal' || typography.fontStyle === 'italic' || typography.fontStyle === 'slant')
     && (typography.slant === undefined || bounded(typography.slant, -25, 25))
     && (typography.glyphScaleX === undefined || bounded(typography.glyphScaleX, 0.5, 1.5))

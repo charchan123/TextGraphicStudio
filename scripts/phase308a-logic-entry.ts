@@ -31,6 +31,7 @@ import {
   setLineEdgeAdjustment,
 } from '@/src/services/lineEdgeAdjustments';
 import { updateGraphicTextContent } from '@/src/services/textContent';
+import { isPartialTextStyle, isProjectTextDefaults } from '@/src/services/styleValidation';
 import { useEditorStore } from '@/src/store/editorStore';
 
 const keyboardEvent = (overrides: Partial<KeyboardEvent> = {}) => {
@@ -52,6 +53,16 @@ const keyboardEvent = (overrides: Partial<KeyboardEvent> = {}) => {
   } as unknown as KeyboardEvent;
   return { event, prevented: () => defaultPrevented, stopped: () => propagationStopped };
 };
+
+assert.equal(isPartialTextStyle({ start: 0, end: 1, fontWeightAdjust: 0 }), true);
+assert.equal(isPartialTextStyle({ start: 0, end: 1, fontWeightAdjust: 16 }), true);
+assert.equal(isPartialTextStyle({ start: 0, end: 1, fontWeightAdjust: 16.5 }), false);
+// Compatibility accepts Phase 3.0.13 Lite data long enough to normalize it;
+// UI and all new writes remain constrained to the positive-only 0..16 range.
+assert.equal(isPartialTextStyle({ start: 0, end: 1, fontWeightAdjust: -1.5 }), true);
+const legacyNegativePreset = cloneQuickPartialOperation({ style: { fontSize: 160, fontWeightAdjust: -1.5 } });
+assert.equal(legacyNegativePreset.style.fontWeightAdjust, 0);
+assert.equal('fontSize' in legacyNegativePreset.style, false);
 
 assert.equal(getHistoryShortcutAction(keyboardEvent({ ctrlKey: true, key: 'z' }).event), 'undo');
 assert.equal(getHistoryShortcutAction(keyboardEvent({ ctrlKey: true, key: 'Z', shiftKey: true }).event), 'redo');
@@ -415,6 +426,15 @@ state().createNewProject();
 assert.equal(state().studioProject.projectTextDefaults?.typography.fontSize, 123);
 assert.equal(state().project.objects[0].typography.fontWeightAdjust, 4);
 assert.equal(state().project.objects[0].text, 'ここにテキストを入力してください。');
+const legacyNegativeDefaults = {
+  ...state().studioProject.projectTextDefaults!,
+  typography: {
+    ...state().studioProject.projectTextDefaults!.typography,
+    fontWeightAdjust: -1.5,
+  },
+};
+assert.equal(isProjectTextDefaults(legacyNegativeDefaults), true);
+assert.equal(toProjectTextDefaults(legacyNegativeDefaults).typography.fontWeightAdjust, 0);
 
 const historyObjectId = state().project.objects[0].id;
 const historyPositionA = state().project.objects[0].position.x;
@@ -687,6 +707,9 @@ const textDefaultsFile = createTextDefaultsFile(importedDefaults, [{
 }]);
 const parsedDefaults = parseTextDefaultsFile(JSON.parse(JSON.stringify(textDefaultsFile)));
 assert.equal(parsedDefaults.defaults.typography.fontWeightAdjust, 3);
+const legacyNegativeDefaultsFile = JSON.parse(JSON.stringify(textDefaultsFile));
+legacyNegativeDefaultsFile.defaults.typography.fontWeightAdjust = -1.5;
+assert.equal(parseTextDefaultsFile(legacyNegativeDefaultsFile).defaults.typography.fontWeightAdjust, 0);
 assert.equal(parsedDefaults.defaults.rotation, -8);
 assert.equal(parsedDefaults.fontReferences[0].id, 'local:test');
 
@@ -769,6 +792,17 @@ assert.equal('lineEdgeAdjustments' in (roundTrip.projectTextDefaults?.background
 assert.equal(roundTrip.frames.some((frame) => frame.document.objects.some((object) => Object.values(object.background.lineEdgeAdjustments ?? {}).some((adjustment) => adjustment.leftInsetPx === 30))), true);
 assert.equal(roundTrip.frames.every((frame) => frame.document.objects.every((object) => object.textLineIds?.length === object.text.replace(/\r\n?/g, '\n').split('\n').length)), true);
 assert.equal(roundTrip.frames.at(-1)?.document.objects.at(-1)?.typography.fontWeightAdjust, 3);
+
+const legacyNegativeProject = JSON.parse(JSON.stringify(roundTrip));
+legacyNegativeProject.projectTextDefaults.typography.fontWeightAdjust = -1.5;
+legacyNegativeProject.frames[0].document.objects[0].typography.fontWeightAdjust = -1;
+legacyNegativeProject.frames[0].document.objects[0].partialStyles = [
+  { start: 0, end: 1, fontWeightAdjust: -2 },
+];
+const normalizedLegacyNegativeProject = normalizeStudioProject(legacyNegativeProject);
+assert.equal(normalizedLegacyNegativeProject.projectTextDefaults?.typography.fontWeightAdjust, 0);
+assert.equal(normalizedLegacyNegativeProject.frames[0].document.objects[0].typography.fontWeightAdjust, 0);
+assert.equal(normalizedLegacyNegativeProject.frames[0].document.objects[0].partialStyles[0].fontWeightAdjust, 0);
 
 const oldProject = { ...roundTrip, projectTextDefaults: undefined };
 const derived = normalizeStudioProject(oldProject);

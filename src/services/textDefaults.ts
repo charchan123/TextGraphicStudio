@@ -2,6 +2,9 @@ import { cloneBackground, cloneFill, cloneGraphicObject } from '@/src/services/d
 import { getStrokeLayers } from '@/src/services/strokes';
 import type { GraphicTextObject, ProjectTextDefaults, TextDesignDefaults } from '@/src/types/editor';
 
+const normalizeFontWeightAdjust = (value: number | undefined): number =>
+  Number.isFinite(value) ? Math.min(16, Math.max(0, value ?? 0)) : 0;
+
 export const toTextDesignDefaults = (object: GraphicTextObject): TextDesignDefaults => {
   const cloned = cloneGraphicObject(object);
   const { id: _id, name: _name, text: _text, textLineIds: _textLineIds, position: _position, zIndex: _zIndex, lineGapOffsets: _lineGapOffsets, ...design } = cloned;
@@ -42,7 +45,10 @@ export const toProjectTextDefaults = (
   delete background.lineEdgeAdjustments;
   return {
     rotation,
-    typography: { ...source.typography },
+    typography: {
+      ...source.typography,
+      fontWeightAdjust: normalizeFontWeightAdjust(source.typography.fontWeightAdjust),
+    },
     characterScale: { ...source.characterScale },
     fill: cloneFill(source.fill),
     stroke: { ...strokes[0] },
