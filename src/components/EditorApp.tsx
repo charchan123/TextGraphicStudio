@@ -36,6 +36,7 @@ import {
   saveQuickPartialPresets,
 } from '@/src/services/persistence';
 import { loadPalettePreference, savePalettePreference } from '@/src/services/palettePreference';
+import { downloadPhotoshopBridgeFrame } from '@/src/services/photoshopBridge';
 import { createTemplate, downloadTemplate, readTemplateFile } from '@/src/services/templateService';
 import { downloadProjectFile, readProjectFile } from '@/src/services/projectFileService';
 import { createStudioProject } from '@/src/services/studioProject';
@@ -419,6 +420,15 @@ export function EditorApp() {
     void runTask(() => exportAllFramesZip(useEditorStore.getState().getStudioProjectSnapshot()), '全コマをZIP保存しました。');
   };
 
+  const handleExportPhotoshopBridge = () => {
+    try {
+      const bridge = downloadPhotoshopBridgeFrame(useEditorStore.getState().getStudioProjectSnapshot());
+      setNotice(`Photoshop Bridgeを書き出しました（Text Layer ${bridge.objects.length}件）。`, 'success');
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Photoshop Bridgeを書き出せませんでした。', 'error');
+    }
+  };
+
   const handleSaveTemplate = (includePosition: boolean) => {
     const object = useEditorStore.getState().project.objects.find(
       (item) => item.id === useEditorStore.getState().selectedId,
@@ -579,6 +589,7 @@ export function EditorApp() {
           onExportAll={handleExportAll}
           onExportFrames={handleExportFrames}
           onExportFramesZip={handleExportFramesZip}
+          onExportPhotoshopBridge={handleExportPhotoshopBridge}
           onSaveTemplate={handleSaveTemplate}
           onLoadTemplate={() => templateInputRef.current?.click()}
         />

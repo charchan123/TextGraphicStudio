@@ -1,0 +1,158 @@
+:root {
+  color: var(--uxp-host-text-color, #f4f4f5);
+  background: var(--uxp-host-background-color, #242426);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  box-sizing: border-box;
+  overflow-y: auto;
+  background: var(--uxp-host-background-color, #242426);
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  padding: 14px;
+  box-sizing: border-box;
+}
+
+.panel > header,
+.panel > .card {
+  margin: 0 0 12px;
+}
+
+.panel > .card:last-child {
+  margin-bottom: 0;
+}
+
+header h1,
+.card h2 {
+  margin: 0;
+  font-weight: 650;
+}
+
+header h1 {
+  font-size: 17px;
+}
+
+header p,
+.note {
+  margin: 6px 0 0;
+  color: #b9b9bf;
+  line-height: 1.5;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #45454a;
+  border-radius: 6px;
+  background: #2d2d30;
+}
+
+.card h2 {
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+button {
+  display: block;
+  width: 100%;
+  min-height: 32px;
+  margin: 0 0 10px;
+  padding: 6px 12px;
+  border: 1px solid #616169;
+  border-radius: 4px;
+  color: #f7f7f8;
+  background: #3b3b40;
+  font: inherit;
+}
+
+button.primary {
+  border-color: #2788e7;
+  background: #1473e6;
+}
+
+button:disabled {
+  opacity: 0.45;
+}
+
+.preview {
+  display: block;
+  width: 100%;
+  margin: 0;
+}
+
+.preview div {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  min-width: 0;
+  margin: 0 0 6px;
+}
+
+.preview div:last-child {
+  margin-bottom: 0;
+}
+
+.preview dt {
+  flex: 0 0 86px;
+  margin: 0 8px 0 0;
+  color: #a9a9af;
+}
+
+.preview dd {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report {
+  min-height: 72px;
+  padding: 9px;
+  border-radius: 4px;
+  color: #d6d6da;
+  background: #202023;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.report-card .report,
+.card .note {
+  margin-bottom: 0;
+}
+
+.report.is-success {
+  border-left: 3px solid #45a96b;
+}
+
+.report.is-warning {
+  border-left: 3px solid #e6a23c;
+}
+
+.report.is-error {
+  border-left: 3px solid #dc5b62;
+}

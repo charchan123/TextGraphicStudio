@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Text Graphic Studio Bridge</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="panel">
+      <header>
+        <h1>Text Graphic Studio Bridge</h1>
+        <p>TGSの現在コマを、編集可能なPhotoshopテキストレイヤーとして読み込みます。</p>
+      </header>
+
+      <section class="card" aria-labelledby="file-heading">
+        <h2 id="file-heading">1. Bridgeファイル</h2>
+        <button id="select-file" type="button">TGSファイルを選択</button>
+        <dl class="preview" aria-live="polite">
+          <div><dt>ファイル</dt><dd id="file-name">未選択</dd></div>
+          <div><dt>Project</dt><dd id="project-name">—</dd></div>
+          <div><dt>コマ</dt><dd id="frame-name">—</dd></div>
+          <div><dt>Canvas</dt><dd id="canvas-size">—</dd></div>
+          <div><dt>Text objects</dt><dd id="object-count">—</dd></div>
+        </dl>
+      </section>
+
+      <section class="card" aria-labelledby="import-heading">
+        <h2 id="import-heading">2. Photoshopへ読み込み</h2>
+        <button id="import-file" class="primary" type="button" disabled>Photoshopへ読み込み</button>
+        <p class="note">開いているDocumentへ新しいTGS Groupを追加します。既存Layerは変更しません。</p>
+      </section>
+
+      <section class="card report-card" aria-labelledby="report-heading">
+        <h2 id="report-heading">Import Report</h2>
+        <div id="report" class="report is-idle" role="status" aria-live="polite">Bridgeファイルを選択してください。</div>
+      </section>
+    </main>
+    <script src="index.js"></script>
+  </body>
+</html>

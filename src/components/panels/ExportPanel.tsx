@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import { FileJson2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { EditorActionButton } from '@/src/components/EditorActionButton';
 import { Checkbox } from '@/components/ui/checkbox';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
@@ -15,6 +17,7 @@ interface ExportPanelProps {
   onExportAll: () => void;
   onExportFrames: () => void;
   onExportFramesZip: () => void;
+  onExportPhotoshopBridge: () => void;
   onSaveTemplate: (includePosition: boolean) => void;
   onLoadTemplate: () => void;
 }
@@ -26,6 +29,7 @@ export function ExportPanel({
   onExportAll,
   onExportFrames,
   onExportFramesZip,
+  onExportPhotoshopBridge,
   onSaveTemplate,
   onLoadTemplate,
 }: ExportPanelProps) {
@@ -54,6 +58,26 @@ export function ExportPanel({
           <EditorActionButton action="exportFramesZip" variant="outline" size="lg" disabled={busy} onClick={onExportFramesZip} />
         </div>
         <p className="panel-note">透明PNGにはフチ・影・テキスト背景を含めます。キャンバス背景画像とガイドは含めません。</p>
+      </section>
+
+      <section className="panel-section">
+        <div className="section-heading">
+          <div>
+            <h2>Photoshop Bridge（β）</h2>
+            <p>現在のコマを編集可能なPhotoshopテキスト用JSONへ書き出します</p>
+          </div>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full justify-start"
+          disabled={busy}
+          onClick={onExportPhotoshopBridge}
+        >
+          <FileJson2 aria-hidden="true" />
+          現在のコマを書き出す
+        </Button>
+        <p className="panel-note">Photoshop UXPプラグインで読み込み、編集可能なテキストレイヤーとして作成します。</p>
       </section>
 
       <section className="panel-section">

@@ -1,0 +1,39 @@
+{
+  "manifestVersion": 5,
+  "id": "com.textgraphicstudio.photoshop-bridge.dev",
+  "name": "Text Graphic Studio Bridge",
+  "version": "0.1.0",
+  "main": "index.html",
+  "host": {
+    "app": "PS",
+    "minVersion": "24.2.0"
+  },
+  "entrypoints": [
+    {
+      "type": "panel",
+      "id": "tgsBridgePanel",
+      "label": {
+        "default": "Text Graphic Studio Bridge"
+      },
+      "minimumSize": {
+        "width": 280,
+        "height": 360
+      },
+      "maximumSize": {
+        "width": 1200,
+        "height": 1600
+      },
+      "preferredDockedSize": {
+        "width": 320,
+        "height": 520
+      },
+      "preferredFloatingSize": {
+        "width": 360,
+        "height": 600
+      }
+    }
+  ],
+  "requiredPermissions": {
+    "localFileSystem": "request"
+  }
+}

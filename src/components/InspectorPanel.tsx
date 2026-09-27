@@ -18,6 +18,7 @@ interface InspectorPanelProps {
   onExportAll: () => void;
   onExportFrames: () => void;
   onExportFramesZip: () => void;
+  onExportPhotoshopBridge: () => void;
   onSaveTemplate: (includePosition: boolean) => void;
   onLoadTemplate: () => void;
 }
