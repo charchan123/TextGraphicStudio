@@ -104,12 +104,25 @@ export interface RoughBandStyle {
   image?: TextBackgroundImage;
   /** uploadedImage only: one image for the text block, or one measured image per line. */
   imageMode?: 'fixed' | 'followLines';
+  /** Optional explicit horizontal 3-slice metadata. Missing keeps legacy rendering unchanged. */
+  horizontalSlice?: {
+    enabled: boolean;
+    leftRatio: number;
+    rightRatio: number;
+  };
+  /** Object-local logical-line ID keyed edge corrections. Positive values shrink inward. */
+  lineEdgeAdjustments?: Record<string, LineEdgeAdjustment>;
   /** Internal three-slice settings; optional for backward-compatible V1 data. */
   followSettings?: {
     capRatio: number;
     seamOverlap: number;
     lineOverlap: number;
   };
+}
+
+export interface LineEdgeAdjustment {
+  leftInsetPx: number;
+  rightInsetPx: number;
 }
 
 export interface TextBackgroundImage {
@@ -185,6 +198,8 @@ export interface GraphicTextObject {
   id: string;
   name: string;
   text: string;
+  /** Stable identities for the logical lines in `text`; scoped to this TextObject. */
+  textLineIds?: string[];
   position: Point2D;
   size: Size2D;
   transform: {
@@ -291,14 +306,16 @@ export interface GraphicTextTemplateV1 {
 /** Styling copied into newly-created text. Content, position and range styles are excluded by the factory. */
 export type TextDesignDefaults = Omit<
   GraphicTextObject,
-  'id' | 'name' | 'text' | 'position' | 'zIndex' | 'lineGapOffsets'
+  'id' | 'name' | 'text' | 'textLineIds' | 'position' | 'zIndex' | 'lineGapOffsets'
 >;
 
 /** Project-scoped appearance defaults. Content, position, scale, locks and range/line corrections are excluded. */
-export type ProjectTextDefaults = Pick<
+export type ProjectTextDefaults = Omit<Pick<
   GraphicTextObject,
   'typography' | 'characterScale' | 'fill' | 'stroke' | 'outerStroke' | 'strokes' | 'shadow' | 'background'
-> & {
+>, 'background'> & {
+  /** Object/line-specific edge corrections are deliberately excluded. */
+  background: Omit<RoughBandStyle, 'lineEdgeAdjustments'>;
   /** Optional for backward compatibility. Missing legacy values normalize to 0 degrees. */
   rotation?: number;
 };

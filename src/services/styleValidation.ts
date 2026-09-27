@@ -55,6 +55,18 @@ export const isPartialTextStyle = (value: unknown): value is PartialTextStyle =>
   && (value.glyphOffsetX === undefined || bounded(value.glyphOffsetX, -100, 100))
   && (value.strokes === undefined || isPartialStrokes(value.strokes));
 
+const isLineEdgeAdjustment = (value: unknown): boolean => isRecord(value)
+  && bounded(value.leftInsetPx, -500, 500)
+  && bounded(value.rightInsetPx, -500, 500);
+
+const isLineEdgeAdjustments = (value: unknown): boolean => {
+  if (Array.isArray(value)) return value.length <= 1000 && value.every(isLineEdgeAdjustment);
+  if (!isRecord(value)) return false;
+  const entries = Object.entries(value);
+  return entries.length <= 1000 && entries.every(([lineId, adjustment]) =>
+    lineId.length > 0 && lineId.length <= 160 && isLineEdgeAdjustment(adjustment));
+};
+
 export const isTextBackground = (value: unknown): value is RoughBandStyle => isRecord(value)
   && ['none', 'rough-band', 'generatedRoughYellow', 'uploadedImage'].includes(String(value.type))
   && typeof value.enabled === 'boolean' && color(value.color)
@@ -64,6 +76,12 @@ export const isTextBackground = (value: unknown): value is RoughBandStyle => isR
   && bounded(value.roughness, 0, 1) && bounded(value.seed, -Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER)
   && (value.image === undefined || isEmbeddedBackgroundImage(value.image))
   && (value.imageMode === undefined || value.imageMode === 'fixed' || value.imageMode === 'followLines')
+  && (value.horizontalSlice === undefined || (isRecord(value.horizontalSlice)
+    && typeof value.horizontalSlice.enabled === 'boolean'
+    && bounded(value.horizontalSlice.leftRatio, 0, 0.45)
+    && bounded(value.horizontalSlice.rightRatio, 0, 0.45)
+    && Number(value.horizontalSlice.leftRatio) + Number(value.horizontalSlice.rightRatio) <= 0.9))
+  && (value.lineEdgeAdjustments === undefined || isLineEdgeAdjustments(value.lineEdgeAdjustments))
   && (value.followSettings === undefined || (isRecord(value.followSettings)
     && bounded(value.followSettings.capRatio, 0.05, 0.45)
     && bounded(value.followSettings.seamOverlap, 0, 16)

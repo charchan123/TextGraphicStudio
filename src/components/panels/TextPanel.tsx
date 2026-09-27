@@ -9,6 +9,7 @@ import { SelectionEmpty } from '@/src/components/panels/SelectionEmpty';
 import { PartialStyleEditor } from '@/src/components/panels/PartialStyleEditor';
 import { LineGapEditor } from '@/src/components/panels/LineGapEditor';
 import { updateGraphicTextContent } from '@/src/services/textContent';
+import type { TextInputEditHint } from '@/src/services/lineEdgeAdjustments';
 import { useObjectEditor } from '@/src/hooks/useObjectEditor';
 import { useEditorStore } from '@/src/store/editorStore';
 import type { TextAlignment } from '@/src/types/editor';
@@ -21,6 +22,7 @@ const ALIGN_OPTIONS: Array<{ value: TextAlignment; label: string }> = [
 
 export function TextPanel() {
   const selectedTextRef = useRef<HTMLTextAreaElement>(null);
+  const pendingTextEditRef = useRef<TextInputEditHint | null>(null);
   const [newText, setNewText] = useState('新しいタイトル');
   const project = useEditorStore((state) => state.project);
   const selectedId = useEditorStore((state) => state.selectedId);
@@ -44,6 +46,9 @@ export function TextPanel() {
   const activeStart = selectionMatches ? range!.start : 0;
   const activeEnd = selectionMatches ? range!.end : 0;
   useEffect(() => {
+    pendingTextEditRef.current = null;
+  }, [selectedObjectId]);
+  useEffect(() => {
     if (!selectedObjectId || activeStart === activeEnd) return;
     selectedTextRef.current?.setSelectionRange(activeStart, activeEnd);
   }, [activeEnd, activeStart, selectedObjectId]);
@@ -66,14 +71,27 @@ export function TextPanel() {
           rows={4}
           aria-label="選択中のテキスト内容"
           onFocus={editor.begin}
-          onChange={(event) => editor.preview((object) => updateGraphicTextContent(object, event.currentTarget.value))}
+          onBeforeInput={(event) => {
+            const inputEvent = event.nativeEvent as InputEvent;
+            pendingTextEditRef.current = {
+              selectionStart: event.currentTarget.selectionStart,
+              selectionEnd: event.currentTarget.selectionEnd,
+              inputType: inputEvent.inputType,
+              data: inputEvent.data,
+            };
+          }}
+          onChange={(event) => {
+            const editHint = pendingTextEditRef.current ?? undefined;
+            pendingTextEditRef.current = null;
+            editor.preview((object) => updateGraphicTextContent(object, event.currentTarget.value, editHint));
+          }}
           onSelect={(event) => {
             const start = event.currentTarget.selectionStart;
             const end = event.currentTarget.selectionEnd;
             if (start >= end) return;
             setTextSelection({ frameId: activeFrameId, objectId: selected.id, text: selected.text, start, end });
           }}
-          onBlur={editor.finish}
+          onBlur={() => { pendingTextEditRef.current = null; editor.finish(); }}
         />
       </section>
       <section className="panel-section panel-section-group-start">

@@ -19,6 +19,18 @@ import { toProjectTextDefaults } from '@/src/services/textDefaults';
 import { getOutputPreviewKeyboardAction, getOutputPreviewTargetIndex } from '@/src/services/outputPreviewNavigation';
 import { graphicPngFileName } from '@/src/services/exportFileNames';
 import { getHistoryShortcutAction, handleHistoryShortcut, performRedo, performUndo } from '@/src/services/historyShortcuts';
+import { calculateHorizontalSliceGeometry, normalizeHorizontalSlice } from '@/src/services/horizontalSlice';
+import {
+  calculateAdjustedLineBackgroundBounds,
+  getLineEdgeAdjustment,
+  getLogicalLineEdgeAdjustment,
+  inferTextEditRange,
+  normalizeLineEdgeAdjustments,
+  reconcileTextLineIdentity,
+  resolveTextEditRange,
+  setLineEdgeAdjustment,
+} from '@/src/services/lineEdgeAdjustments';
+import { updateGraphicTextContent } from '@/src/services/textContent';
 import { useEditorStore } from '@/src/store/editorStore';
 
 const keyboardEvent = (overrides: Partial<KeyboardEvent> = {}) => {
@@ -145,6 +157,253 @@ assert.equal(
   (centeredGeometry.selection.left + centeredGeometry.selection.right) / 2,
   (centeredGeometry.reference.left + centeredGeometry.reference.right) / 2,
 );
+
+const baseSlice = { enabled: true, leftRatio: 0.2, rightRatio: 0.2 };
+const sourceSizeSlice = calculateHorizontalSliceGeometry(1000, 200, 1000, 200, baseSlice);
+assert.equal(sourceSizeSlice.sourceLeftWidth, 200);
+assert.equal(sourceSizeSlice.sourceCenterWidth, 600);
+assert.equal(sourceSizeSlice.sourceRightWidth, 200);
+assert.equal(sourceSizeSlice.targetLeftWidth, 200);
+assert.equal(sourceSizeSlice.targetCenterWidth, 600);
+assert.equal(sourceSizeSlice.targetRightWidth, 200);
+const expandedSlice = calculateHorizontalSliceGeometry(1000, 200, 1600, 200, baseSlice);
+assert.equal(expandedSlice.targetLeftWidth, 200);
+assert.equal(expandedSlice.targetCenterWidth, 1200);
+assert.equal(expandedSlice.targetRightWidth, 200);
+const shrunkSlice = calculateHorizontalSliceGeometry(1000, 200, 700, 200, baseSlice);
+assert.equal(shrunkSlice.targetLeftWidth, 200);
+assert.equal(shrunkSlice.targetCenterWidth, 300);
+assert.equal(shrunkSlice.targetRightWidth, 200);
+const minimumSlice = calculateHorizontalSliceGeometry(1000, 200, 100, 200, baseSlice);
+assert.equal(minimumSlice.targetWidth, 401);
+assert.equal(minimumSlice.targetCenterWidth, 1);
+assert.ok(minimumSlice.targetCenterWidth > 0);
+assert.deepEqual(normalizeHorizontalSlice({ enabled: true, leftRatio: 2, rightRatio: -1 }), {
+  enabled: true, leftRatio: 0.45, rightRatio: 0,
+});
+
+const lineBaseline = calculateAdjustedLineBackgroundBounds({ width: 100, centerX: 100 }, 10, undefined);
+assert.deepEqual(lineBaseline, { baselineLeft: 40, baselineRight: 160, left: 40, right: 160, centerX: 100, width: 120 });
+const lineLeftInset = calculateAdjustedLineBackgroundBounds({ width: 100, centerX: 100 }, 10, { leftInsetPx: 30, rightInsetPx: 0 });
+assert.deepEqual(lineLeftInset, { baselineLeft: 40, baselineRight: 160, left: 70, right: 160, centerX: 115, width: 90 });
+const lineRightInset = calculateAdjustedLineBackgroundBounds({ width: 100, centerX: 100 }, 10, { leftInsetPx: 0, rightInsetPx: 30 });
+assert.deepEqual(lineRightInset, { baselineLeft: 40, baselineRight: 160, left: 40, right: 130, centerX: 85, width: 90 });
+const lineExpanded = calculateAdjustedLineBackgroundBounds({ width: 100, centerX: 100 }, 10, { leftInsetPx: -30, rightInsetPx: -30 });
+assert.deepEqual(lineExpanded, { baselineLeft: 40, baselineRight: 160, left: 10, right: 190, centerX: 100, width: 180 });
+const lineCollapsed = calculateAdjustedLineBackgroundBounds({ width: 10, centerX: 0 }, 0, { leftInsetPx: 30, rightInsetPx: 30 });
+assert.equal(lineCollapsed.width, 1);
+let lineAdjustments = setLineEdgeAdjustment(undefined, 'line-b', { leftInsetPx: 30 });
+assert.deepEqual(getLineEdgeAdjustment(lineAdjustments, 'line-a'), { leftInsetPx: 0, rightInsetPx: 0 });
+assert.deepEqual(getLineEdgeAdjustment(lineAdjustments, 'line-b'), { leftInsetPx: 30, rightInsetPx: 0 });
+assert.deepEqual(getLineEdgeAdjustment(lineAdjustments, undefined), { leftInsetPx: 0, rightInsetPx: 0 });
+lineAdjustments = setLineEdgeAdjustment(lineAdjustments, 'line-b', { leftInsetPx: 0, rightInsetPx: 0 });
+assert.equal(lineAdjustments, undefined);
+
+const logicalLineIds = ['render-a', 'render-blank', 'render-b', 'render-c'];
+const logicalLineAdjustments = {
+  'render-blank': { leftInsetPx: 17, rightInsetPx: 19 },
+  'render-b': { leftInsetPx: 100, rightInsetPx: 100 },
+};
+const renderableLogicalLineIndexes = [0, 2, 3];
+assert.deepEqual(
+  renderableLogicalLineIndexes.map((logicalLineIndex) =>
+    getLogicalLineEdgeAdjustment(logicalLineAdjustments, logicalLineIds, logicalLineIndex)),
+  [
+    { leftInsetPx: 0, rightInsetPx: 0 },
+    { leftInsetPx: 100, rightInsetPx: 100 },
+    { leftInsetPx: 0, rightInsetPx: 0 },
+  ],
+);
+assert.deepEqual(
+  getLogicalLineEdgeAdjustment(logicalLineAdjustments, logicalLineIds, 1),
+  { leftInsetPx: 17, rightInsetPx: 19 },
+);
+const consecutiveBlankLineIds = ['consecutive-a', 'blank-one', 'blank-two', 'consecutive-b', 'consecutive-c'];
+const consecutiveBlankAdjustments = { 'consecutive-b': { leftInsetPx: -50, rightInsetPx: -50 } };
+assert.deepEqual(
+  [0, 3, 4].map((logicalLineIndex) =>
+    getLogicalLineEdgeAdjustment(consecutiveBlankAdjustments, consecutiveBlankLineIds, logicalLineIndex)),
+  [
+    { leftInsetPx: 0, rightInsetPx: 0 },
+    { leftInsetPx: -50, rightInsetPx: -50 },
+    { leftInsetPx: 0, rightInsetPx: 0 },
+  ],
+);
+assert.deepEqual(
+  [1, 2].map((logicalLineIndex) =>
+    getLogicalLineEdgeAdjustment(consecutiveBlankAdjustments, consecutiveBlankLineIds, logicalLineIndex)),
+  [
+    { leftInsetPx: 0, rightInsetPx: 0 },
+    { leftInsetPx: 0, rightInsetPx: 0 },
+  ],
+);
+assert.deepEqual(
+  [1, 2].map((logicalLineIndex) =>
+    getLogicalLineEdgeAdjustment(
+      { 'leading-a': { leftInsetPx: 8, rightInsetPx: 3 } },
+      ['leading-blank', 'leading-a', 'trailing-blank'],
+      logicalLineIndex,
+    )),
+  [
+    { leftInsetPx: 8, rightInsetPx: 3 },
+    { leftInsetPx: 0, rightInsetPx: 0 },
+  ],
+);
+const blankFilledIdentity = reconcileTextLineIdentity({
+  oldText: 'ここに\n\n入力して\nください。',
+  newText: 'ここに\nテキストを\n入力して\nください。',
+  oldLineIds: logicalLineIds,
+  oldAdjustments: logicalLineAdjustments,
+});
+assert.deepEqual(blankFilledIdentity.textLineIds, logicalLineIds);
+assert.deepEqual(
+  getLogicalLineEdgeAdjustment(blankFilledIdentity.lineEdgeAdjustments, blankFilledIdentity.textLineIds, 2),
+  { leftInsetPx: 100, rightInsetPx: 100 },
+);
+assert.deepEqual(
+  getLogicalLineEdgeAdjustment(blankFilledIdentity.lineEdgeAdjustments, blankFilledIdentity.textLineIds, 1),
+  { leftInsetPx: 17, rightInsetPx: 19 },
+);
+const blankInsertedIdentity = reconcileTextLineIdentity({
+  oldText: 'A\nB\nC',
+  newText: 'A\n\nB\nC',
+  oldLineIds: ['insert-blank-a', 'insert-blank-b', 'insert-blank-c'],
+  oldAdjustments: { 'insert-blank-b': { leftInsetPx: -25, rightInsetPx: 12 } },
+});
+assert.equal(blankInsertedIdentity.textLineIds[2], 'insert-blank-b');
+assert.deepEqual(
+  getLogicalLineEdgeAdjustment(blankInsertedIdentity.lineEdgeAdjustments, blankInsertedIdentity.textLineIds, 2),
+  { leftInsetPx: -25, rightInsetPx: 12 },
+);
+assert.deepEqual(
+  getLogicalLineEdgeAdjustment(blankInsertedIdentity.lineEdgeAdjustments, blankInsertedIdentity.textLineIds, 1),
+  { leftInsetPx: 0, rightInsetPx: 0 },
+);
+
+const identityIds = ['id-a', 'id-b', 'id-c', 'id-d'];
+const identityAdjustments = { 'id-c': { leftInsetPx: -50, rightInsetPx: -50 } };
+const reconcile = (
+  oldText: string,
+  newText: string,
+  oldLineIds: readonly string[],
+  oldAdjustments?: Record<string, { leftInsetPx: number; rightInsetPx: number }>,
+) => reconcileTextLineIdentity({ oldText, newText, oldLineIds, oldAdjustments });
+const insertedIdentity = reconcile('A\nB\nC\nD', 'A\nB\nX\nC\nD', identityIds, identityAdjustments);
+assert.deepEqual(insertedIdentity.textLineIds.filter((id) => identityIds.includes(id)), identityIds);
+assert.equal(insertedIdentity.textLineIds[3], 'id-c');
+assert.deepEqual(getLineEdgeAdjustment(insertedIdentity.lineEdgeAdjustments, 'id-c'), { leftInsetPx: -50, rightInsetPx: -50 });
+assert.deepEqual(getLineEdgeAdjustment(insertedIdentity.lineEdgeAdjustments, insertedIdentity.textLineIds[2]), { leftInsetPx: 0, rightInsetPx: 0 });
+const deletedIdentity = reconcile('A\nB\nC\nD', 'A\nB\nD', identityIds, identityAdjustments);
+assert.deepEqual(deletedIdentity.textLineIds, ['id-a', 'id-b', 'id-d']);
+assert.equal(deletedIdentity.lineEdgeAdjustments, undefined);
+const aboveDeletedIdentity = reconcile('A\nB\nC\nD', 'A\nC\nD', identityIds, identityAdjustments);
+assert.equal(aboveDeletedIdentity.textLineIds[1], 'id-c');
+assert.deepEqual(getLineEdgeAdjustment(aboveDeletedIdentity.lineEdgeAdjustments, 'id-c'), { leftInsetPx: -50, rightInsetPx: -50 });
+const editedIdentity = reconcile('A\n年間288試合！\nC', 'A\n年間300試合！\nC', ['edit-a', 'edit-target', 'edit-c'], {
+  'edit-target': { leftInsetPx: -50, rightInsetPx: -50 },
+});
+assert.equal(editedIdentity.textLineIds[1], 'edit-target');
+assert.deepEqual(getLineEdgeAdjustment(editedIdentity.lineEdgeAdjustments, 'edit-target'), { leftInsetPx: -50, rightInsetPx: -50 });
+const topInsertedIdentity = reconcile('A\nB\nC', 'TITLE\nA\nB\nC', ['top-a', 'top-b', 'top-c'], {
+  'top-c': { leftInsetPx: 30, rightInsetPx: -20 },
+});
+assert.equal(topInsertedIdentity.textLineIds[3], 'top-c');
+assert.deepEqual(getLineEdgeAdjustment(topInsertedIdentity.lineEdgeAdjustments, 'top-c'), { leftInsetPx: 30, rightInsetPx: -20 });
+const duplicateIdentity = reconcile('A\n同じ\n同じ\nD', 'TITLE\nA\n同じ\n同じ\nD', ['dup-a', 'dup-first', 'dup-second', 'dup-d'], {
+  'dup-second': { leftInsetPx: -40, rightInsetPx: 0 },
+});
+assert.equal(duplicateIdentity.textLineIds[2], 'dup-first');
+assert.equal(duplicateIdentity.textLineIds[3], 'dup-second');
+assert.deepEqual(getLineEdgeAdjustment(duplicateIdentity.lineEdgeAdjustments, 'dup-second'), { leftInsetPx: -40, rightInsetPx: 0 });
+const multipleInsertedIdentity = reconcile('A\nB\nC', 'A\nX\nY\nB\nC', ['multi-a', 'multi-b', 'multi-c']);
+assert.equal(multipleInsertedIdentity.textLineIds[3], 'multi-b');
+assert.equal(multipleInsertedIdentity.textLineIds[4], 'multi-c');
+const bottomInsertedIdentity = reconcile('A\nB\nC', 'A\nB\nC\nBOTTOM', ['bottom-a', 'bottom-b', 'bottom-c']);
+assert.deepEqual(bottomInsertedIdentity.textLineIds.slice(0, 3), ['bottom-a', 'bottom-b', 'bottom-c']);
+const multipleDeletedIdentity = reconcile('A\nX\nY\nB\nC', 'A\nB\nC', ['del-a', 'del-x', 'del-y', 'del-b', 'del-c']);
+assert.deepEqual(multipleDeletedIdentity.textLineIds, ['del-a', 'del-b', 'del-c']);
+const splitIdentity = reconcile('ABCDEF', 'ABC\nDEF', ['split-source'], { 'split-source': { leftInsetPx: 12, rightInsetPx: 4 } });
+assert.equal(splitIdentity.textLineIds[0], 'split-source');
+assert.notEqual(splitIdentity.textLineIds[1], 'split-source');
+const mergeIdentity = reconcile('ABC\nDEF', 'ABCDEF', ['merge-first', 'merge-second'], { 'merge-first': { leftInsetPx: 7, rightInsetPx: 3 } });
+assert.equal(mergeIdentity.textLineIds[0], 'merge-first');
+assert.deepEqual(getLineEdgeAdjustment(mergeIdentity.lineEdgeAdjustments, 'merge-first'), { leftInsetPx: 7, rightInsetPx: 3 });
+assert.deepEqual(getLineEdgeAdjustment(mergeIdentity.lineEdgeAdjustments, 'merge-second'), { leftInsetPx: 0, rightInsetPx: 0 });
+
+const blankDeletedIdentity = reconcile(
+  'ここにテキストを\n\nテストです。\nこれはテスト。',
+  'ここにテキストを\nテストです。\nこれはテスト。',
+  ['blank-head', 'blank-line', 'blank-target', 'blank-tail'],
+  { 'blank-target': { leftInsetPx: -50, rightInsetPx: -50 } },
+);
+assert.deepEqual(blankDeletedIdentity.textLineIds, ['blank-head', 'blank-target', 'blank-tail']);
+assert.deepEqual(getLineEdgeAdjustment(blankDeletedIdentity.lineEdgeAdjustments, 'blank-target'), { leftInsetPx: -50, rightInsetPx: -50 });
+assert.deepEqual(getLineEdgeAdjustment(blankDeletedIdentity.lineEdgeAdjustments, 'blank-tail'), { leftInsetPx: 0, rightInsetPx: 0 });
+
+const punctuationIdentity = reconcile(
+  'ここにテキストを\nテストです\nテストです。\nこれはテスト。',
+  'ここにテキストを\nテストです。\nテストです。\nこれはテスト。',
+  ['punct-head', 'punct-first', 'punct-second', 'punct-tail'],
+  { 'punct-second': { leftInsetPx: -50, rightInsetPx: -50 } },
+);
+assert.deepEqual(punctuationIdentity.textLineIds, ['punct-head', 'punct-first', 'punct-second', 'punct-tail']);
+assert.deepEqual(getLineEdgeAdjustment(punctuationIdentity.lineEdgeAdjustments, 'punct-second'), { leftInsetPx: -50, rightInsetPx: -50 });
+assert.deepEqual(getLineEdgeAdjustment(punctuationIdentity.lineEdgeAdjustments, 'punct-first'), { leftInsetPx: 0, rightInsetPx: 0 });
+
+const pasteIdentity = reconcile(
+  'A\nBfoo\nC\nD',
+  'A\nBX\nY\nZfoo\nC\nD',
+  ['paste-a', 'paste-b', 'paste-c', 'paste-d'],
+  { 'paste-b': { leftInsetPx: 9, rightInsetPx: 2 } },
+);
+assert.equal(pasteIdentity.textLineIds[1], 'paste-b');
+assert.equal(pasteIdentity.textLineIds[4], 'paste-c');
+assert.equal(pasteIdentity.textLineIds[5], 'paste-d');
+assert.deepEqual(getLineEdgeAdjustment(pasteIdentity.lineEdgeAdjustments, 'paste-b'), { leftInsetPx: 9, rightInsetPx: 2 });
+
+const selectionRange = resolveTextEditRange('A\nB\nC\nD', 'A\nX\nD', {
+  selectionStart: 2,
+  selectionEnd: 6,
+  inputType: 'insertText',
+  data: 'X\n',
+});
+assert.deepEqual(selectionRange, { oldStart: 2, oldEnd: 6, newStart: 2, newEnd: 4, inputType: 'insertText' });
+const selectionReplacedIdentity = reconcileTextLineIdentity({
+  oldText: 'A\nB\nC\nD',
+  newText: 'A\nX\nD',
+  oldLineIds: ['replace-a', 'replace-b', 'replace-c', 'replace-d'],
+  oldAdjustments: { 'replace-d': { leftInsetPx: 14, rightInsetPx: 6 } },
+  editRange: selectionRange,
+});
+assert.equal(selectionReplacedIdentity.textLineIds[0], 'replace-a');
+assert.equal(selectionReplacedIdentity.textLineIds[2], 'replace-d');
+assert.notEqual(selectionReplacedIdentity.textLineIds[1], 'replace-b');
+assert.notEqual(selectionReplacedIdentity.textLineIds[1], 'replace-c');
+assert.deepEqual(getLineEdgeAdjustment(selectionReplacedIdentity.lineEdgeAdjustments, 'replace-d'), { leftInsetPx: 14, rightInsetPx: 6 });
+
+assert.deepEqual(inferTextEditRange('A\nB\nC\nD', 'A\nB\nX\nC\nD'), {
+  oldStart: 4, oldEnd: 4, newStart: 4, newEnd: 6,
+});
+const japaneseRange = resolveTextEditRange('日本語入力', '日本語の入力', {
+  selectionStart: 3,
+  selectionEnd: 3,
+  inputType: 'insertCompositionText',
+  data: 'の',
+});
+assert.equal(japaneseRange.inputType, 'insertCompositionText');
+const japaneseIdentity = reconcileTextLineIdentity({
+  oldText: '日本語入力',
+  newText: '日本語の入力',
+  oldLineIds: ['japanese-line'],
+  oldAdjustments: { 'japanese-line': { leftInsetPx: 18, rightInsetPx: -3 } },
+  editRange: japaneseRange,
+});
+assert.deepEqual(japaneseIdentity.textLineIds, ['japanese-line']);
+assert.deepEqual(getLineEdgeAdjustment(japaneseIdentity.lineEdgeAdjustments, 'japanese-line'), { leftInsetPx: 18, rightInsetPx: -3 });
+assert.deepEqual(normalizeLineEdgeAdjustments([
+  { leftInsetPx: 0, rightInsetPx: 0 },
+  { leftInsetPx: 25, rightInsetPx: -5 },
+], ['legacy-a', 'legacy-b']), { 'legacy-b': { leftInsetPx: 25, rightInsetPx: -5 } });
 
 const state = () => useEditorStore.getState();
 const seeded = {
@@ -300,14 +559,106 @@ state().redo();
 assert.equal(state().project.objects.find((object) => object.id === firstId)!.transform.rotation, -8);
 assert.equal(state().studioProject.projectTextDefaults?.rotation, -8);
 
+const sliceObjectId = state().project.objects[0].id;
+const previousHorizontalSlice = state().project.objects[0].background.horizontalSlice;
+state().updateObject(sliceObjectId, (object) => ({
+  ...object,
+  background: { ...object.background, horizontalSlice: { enabled: true, leftRatio: 0.2, rightRatio: 0.15 } },
+}));
+assert.deepEqual(state().project.objects[0].background.horizontalSlice, { enabled: true, leftRatio: 0.2, rightRatio: 0.15 });
+assert.deepEqual(state().studioProject.projectTextDefaults?.background.horizontalSlice, { enabled: true, leftRatio: 0.2, rightRatio: 0.15 });
+state().undo();
+assert.deepEqual(state().project.objects[0].background.horizontalSlice, previousHorizontalSlice);
+state().redo();
+assert.deepEqual(state().project.objects[0].background.horizontalSlice, { enabled: true, leftRatio: 0.2, rightRatio: 0.15 });
+assert.equal('lineEdgeAdjustments' in (state().studioProject.projectTextDefaults?.background ?? {}), false);
+
 state().addFrame();
 assert.equal(state().textSelection, null);
 assert.equal(state().project.objects[0].text, 'ここにテキストを入力してください。');
 assert.equal(state().project.objects[0].typography.fontWeightAdjust, 6);
 assert.equal(state().project.objects[0].transform.rotation, -8);
+assert.deepEqual(state().project.objects[0].background.horizontalSlice, { enabled: true, leftRatio: 0.2, rightRatio: 0.15 });
+assert.equal(state().project.objects[0].background.lineEdgeAdjustments, undefined);
 state().addGraphic('追加Text');
 assert.equal(state().project.objects.at(-1)?.typography.fontWeightAdjust, 6);
 assert.equal(state().project.objects.at(-1)?.transform.rotation, -8);
+assert.deepEqual(state().project.objects.at(-1)?.background.horizontalSlice, { enabled: true, leftRatio: 0.2, rightRatio: 0.15 });
+assert.equal(state().project.objects.at(-1)?.background.lineEdgeAdjustments, undefined);
+
+const edgeObjectId = state().project.objects[0].id;
+state().updateObject(edgeObjectId, (object) => updateGraphicTextContent(object, 'A\nB\nC\nD'));
+const edgeLineIds = state().project.objects[0].textLineIds!;
+const edgeCLineId = edgeLineIds[2];
+const edgePastCount = state().past.length;
+state().beginTransaction();
+state().updateObject(edgeObjectId, (object) => ({
+  ...object,
+  background: { ...object.background, lineEdgeAdjustments: setLineEdgeAdjustment(object.background.lineEdgeAdjustments, edgeCLineId, { leftInsetPx: 30 }) },
+}), false);
+state().finishTransaction();
+assert.equal(state().past.length, edgePastCount + 1);
+assert.deepEqual(state().project.objects[0].background.lineEdgeAdjustments, {
+  [edgeCLineId]: { leftInsetPx: 30, rightInsetPx: 0 },
+});
+assert.equal('lineEdgeAdjustments' in (state().studioProject.projectTextDefaults?.background ?? {}), false);
+state().undo();
+assert.equal(state().project.objects[0].background.lineEdgeAdjustments, undefined);
+state().redo();
+assert.equal(state().project.objects[0].background.lineEdgeAdjustments?.[edgeCLineId].leftInsetPx, 30);
+
+const beforeLineInsert = structuredClone(state().project.objects[0]);
+state().updateObject(edgeObjectId, (object) => updateGraphicTextContent(object, 'A\nB\nX\nC\nD'));
+assert.equal(state().project.objects[0].textLineIds?.[3], edgeCLineId);
+assert.equal(state().project.objects[0].background.lineEdgeAdjustments?.[edgeCLineId].leftInsetPx, 30);
+assert.deepEqual(getLineEdgeAdjustment(state().project.objects[0].background.lineEdgeAdjustments, state().project.objects[0].textLineIds?.[2]), { leftInsetPx: 0, rightInsetPx: 0 });
+state().undo();
+assert.equal(state().project.objects[0].text, beforeLineInsert.text);
+assert.deepEqual(state().project.objects[0].textLineIds, beforeLineInsert.textLineIds);
+assert.deepEqual(state().project.objects[0].background.lineEdgeAdjustments, beforeLineInsert.background.lineEdgeAdjustments);
+state().redo();
+assert.equal(state().project.objects[0].text, 'A\nB\nX\nC\nD');
+assert.equal(state().project.objects[0].textLineIds?.[3], edgeCLineId);
+assert.equal(state().project.objects[0].background.lineEdgeAdjustments?.[edgeCLineId].leftInsetPx, 30);
+
+const rowResetPastCount = state().past.length;
+state().updateObject(edgeObjectId, (object) => ({
+  ...object,
+  background: { ...object.background, lineEdgeAdjustments: setLineEdgeAdjustment(object.background.lineEdgeAdjustments, edgeCLineId, { leftInsetPx: 0, rightInsetPx: 0 }) },
+}));
+assert.equal(state().past.length, rowResetPastCount + 1);
+assert.equal(state().project.objects[0].background.lineEdgeAdjustments, undefined);
+state().undo();
+assert.equal(state().project.objects[0].background.lineEdgeAdjustments?.[edgeCLineId].leftInsetPx, 30);
+
+state().updateObject(edgeObjectId, (object) => ({
+  ...object,
+  background: {
+    ...object.background,
+    lineEdgeAdjustments: setLineEdgeAdjustment(
+      setLineEdgeAdjustment(object.background.lineEdgeAdjustments, object.textLineIds![0], { leftInsetPx: -20 }),
+      edgeCLineId,
+      { leftInsetPx: 30, rightInsetPx: 15 },
+    ),
+  },
+}));
+const allResetPastCount = state().past.length;
+state().updateObject(edgeObjectId, (object) => ({
+  ...object,
+  background: { ...object.background, lineEdgeAdjustments: undefined },
+}));
+assert.equal(state().past.length, allResetPastCount + 1);
+assert.equal(state().project.objects[0].background.lineEdgeAdjustments, undefined);
+state().undo();
+assert.equal(state().project.objects[0].background.lineEdgeAdjustments?.[edgeCLineId].rightInsetPx, 15);
+
+state().selectObject(edgeObjectId);
+state().duplicateSelected();
+const duplicatedEdgeObject = state().project.objects.find((object) => object.id === state().selectedId)!;
+assert.deepEqual(duplicatedEdgeObject.background.lineEdgeAdjustments, state().project.objects[0].background.lineEdgeAdjustments);
+assert.notEqual(duplicatedEdgeObject.background.lineEdgeAdjustments, state().project.objects[0].background.lineEdgeAdjustments);
+assert.deepEqual(duplicatedEdgeObject.textLineIds, state().project.objects[0].textLineIds);
+assert.notEqual(duplicatedEdgeObject.textLineIds, state().project.objects[0].textLineIds);
 
 const sourceSnapshot = state().getStudioProjectSnapshot();
 const sourceFrameId = sourceSnapshot.activeFrameId;
@@ -315,6 +666,10 @@ const sourceObject = sourceSnapshot.frames.find((frame) => frame.frameId === sou
 state().duplicateFrame(sourceFrameId);
 assert.deepEqual(state().project.objects[0].typography, sourceObject.typography);
 assert.deepEqual(state().project.objects[0].partialStyles, sourceObject.partialStyles);
+assert.deepEqual(state().project.objects[0].background.lineEdgeAdjustments, sourceObject.background.lineEdgeAdjustments);
+assert.notEqual(state().project.objects[0].background.lineEdgeAdjustments, sourceObject.background.lineEdgeAdjustments);
+assert.deepEqual(state().project.objects[0].textLineIds, sourceObject.textLineIds);
+assert.notEqual(state().project.objects[0].textLineIds, sourceObject.textLineIds);
 
 const existingBeforeDefaultsImport = JSON.stringify(state().project.objects);
 const importedDefaults = {
@@ -342,6 +697,8 @@ const embeddedDefaults = {
     enabled: true,
     type: 'uploadedImage' as const,
     imageMode: 'followLines' as const,
+    horizontalSlice: { enabled: true, leftRatio: 0.2, rightRatio: 0.15 },
+    lineEdgeAdjustments: { 'style-line': { leftInsetPx: 35, rightInsetPx: 0 } },
     image: {
       id: 'background:test',
       fileName: 'large-background.png',
@@ -366,6 +723,9 @@ assert.equal(portableJson.includes('data:image/png'), false);
 assert.equal(portableJson.includes('data:font/ttf'), false);
 assert.equal(portableFile.defaults.background.type, 'none');
 assert.equal(portableFile.defaults.background.enabled, false);
+assert.deepEqual(portableFile.defaults.background.horizontalSlice, { enabled: true, leftRatio: 0.2, rightRatio: 0.15 });
+assert.equal('lineEdgeAdjustments' in portableFile.defaults.background, false);
+assert.equal(portableJson.includes('leftInsetPx'), false);
 assert.equal(portableFile.fontReferences?.length, 1);
 assert.equal(portableFile.fontReferences?.[0].id, 'local:test');
 const selfImported = await readTextDefaultsFile(new File([portableJson], 'defaults.tgsstyle.json', { type: 'application/json' }));
@@ -404,6 +764,10 @@ await assert.rejects(
 const roundTrip = normalizeStudioProject(JSON.parse(JSON.stringify(state().getStudioProjectSnapshot())));
 assert.equal(roundTrip.projectTextDefaults?.typography.fontWeightAdjust, 3);
 assert.equal(roundTrip.projectTextDefaults?.rotation, -8);
+assert.deepEqual(roundTrip.projectTextDefaults?.background.horizontalSlice, { enabled: true, leftRatio: 0.2, rightRatio: 0.15 });
+assert.equal('lineEdgeAdjustments' in (roundTrip.projectTextDefaults?.background ?? {}), false);
+assert.equal(roundTrip.frames.some((frame) => frame.document.objects.some((object) => Object.values(object.background.lineEdgeAdjustments ?? {}).some((adjustment) => adjustment.leftInsetPx === 30))), true);
+assert.equal(roundTrip.frames.every((frame) => frame.document.objects.every((object) => object.textLineIds?.length === object.text.replace(/\r\n?/g, '\n').split('\n').length)), true);
 assert.equal(roundTrip.frames.at(-1)?.document.objects.at(-1)?.typography.fontWeightAdjust, 3);
 
 const oldProject = { ...roundTrip, projectTextDefaults: undefined };
@@ -412,6 +776,12 @@ assert.deepEqual(derived.projectTextDefaults, { ...toProjectTextDefaults(derived
 const legacyDefaults = { ...roundTrip.projectTextDefaults };
 delete legacyDefaults.rotation;
 assert.equal(normalizeStudioProject({ ...roundTrip, projectTextDefaults: legacyDefaults }).projectTextDefaults?.rotation, 0);
+const legacySliceProject = structuredClone(roundTrip);
+delete legacySliceProject.projectTextDefaults!.background.horizontalSlice;
+legacySliceProject.frames.forEach((frame) => frame.document.objects.forEach((object) => { delete object.background.horizontalSlice; }));
+const normalizedLegacySliceProject = normalizeStudioProject(legacySliceProject);
+assert.equal(normalizedLegacySliceProject.projectTextDefaults?.background.horizontalSlice, undefined);
+assert.equal(normalizedLegacySliceProject.frames[0].document.objects[0].background.horizontalSlice, undefined);
 const noText = normalizeStudioProject({
   ...oldProject,
   frames: oldProject.frames.map((frame) => ({ ...frame, document: { ...frame.document, objects: [] } })),
@@ -436,4 +806,4 @@ state().updateObject(state().project.objects[0].id, (object) => ({
 }));
 assert.equal(JSON.stringify(state().studioProject.projectTextDefaults), lockedDefaults);
 
-console.log(JSON.stringify({ passed: true, checks: 139 }, null, 2));
+console.log(JSON.stringify({ passed: true, checks: 250 }, null, 2));

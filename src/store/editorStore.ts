@@ -228,7 +228,25 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
       const existing = state.project.objects.find((object) => object.id === id);
       if (!existing) return state;
       if (existing.fullyLocked) return editBlocked(state, '完全ロック中のオブジェクトは編集できません。');
-      const updated = updater(existing);
+      const candidate = updater(existing);
+      const updated = candidate.text !== existing.text && candidate.textLineIds === existing.textLineIds
+        ? {
+            ...candidate,
+            ...(() => {
+              const reconciled = updateGraphicTextContent(existing, candidate.text);
+              return {
+                text: reconciled.text,
+                textLineIds: reconciled.textLineIds,
+                background: {
+                  ...candidate.background,
+                  lineEdgeAdjustments: reconciled.background.lineEdgeAdjustments,
+                },
+                partialStyles: candidate.partialStyles === existing.partialStyles ? reconciled.partialStyles : candidate.partialStyles,
+                lineGapOffsets: candidate.lineGapOffsets === existing.lineGapOffsets ? reconciled.lineGapOffsets : candidate.lineGapOffsets,
+              };
+            })(),
+          }
+        : candidate;
       const textSelection = state.textSelection?.objectId === id && updated.text !== existing.text
         ? null
         : state.textSelection;
@@ -357,6 +375,7 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
         ...source,
         id: createObjectId(),
         name: `${source.name} のコピー`,
+        textLineIds: source.textLineIds ? [...source.textLineIds] : undefined,
         position: { x: source.position.x + 40, y: source.position.y + 40 },
         transform: { ...source.transform },
         typography: { ...source.typography },

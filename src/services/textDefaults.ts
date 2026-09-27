@@ -4,10 +4,13 @@ import type { GraphicTextObject, ProjectTextDefaults, TextDesignDefaults } from 
 
 export const toTextDesignDefaults = (object: GraphicTextObject): TextDesignDefaults => {
   const cloned = cloneGraphicObject(object);
-  const { id: _id, name: _name, text: _text, position: _position, zIndex: _zIndex, lineGapOffsets: _lineGapOffsets, ...design } = cloned;
+  const { id: _id, name: _name, text: _text, textLineIds: _textLineIds, position: _position, zIndex: _zIndex, lineGapOffsets: _lineGapOffsets, ...design } = cloned;
   void _id; void _name; void _text; void _position; void _zIndex; void _lineGapOffsets;
+  const background = cloneBackground(design.background);
+  delete background.lineEdgeAdjustments;
   return {
     ...design,
+    background,
     transform: { ...design.transform, scaleX: 1, scaleY: 1 },
     partialStyles: [],
     locked: false,
@@ -35,6 +38,8 @@ export const toProjectTextDefaults = (
 ): ProjectTextDefaults => {
   const strokes = getStrokeLayers(source);
   const rotation = 'transform' in source ? source.transform.rotation : source.rotation ?? 0;
+  const background = cloneBackground(source.background);
+  delete background.lineEdgeAdjustments;
   return {
     rotation,
     typography: { ...source.typography },
@@ -44,7 +49,7 @@ export const toProjectTextDefaults = (
     outerStroke: { ...strokes[1] },
     strokes,
     shadow: { ...source.shadow },
-    background: cloneBackground(source.background),
+    background,
   };
 };
 

@@ -38,12 +38,58 @@ try {
   const historyShortcuts = await readFile('src/services/historyShortcuts.ts', 'utf8');
   const quickPartialPresets = await readFile('src/services/quickPartialPresets.ts', 'utf8');
   const partialHorizontalPosition = await readFile('src/services/partialHorizontalPosition.ts', 'utf8');
+  const horizontalSlice = await readFile('src/services/horizontalSlice.ts', 'utf8');
+  const textBackgroundEditor = await readFile('src/components/panels/TextBackgroundEditor.tsx', 'utf8');
+  const documentData = await readFile('src/services/documentData.ts', 'utf8');
+  const styleValidation = await readFile('src/services/styleValidation.ts', 'utf8');
+  const textDefaultsFileService = await readFile('src/services/textDefaultsFileService.ts', 'utf8');
+  const lineEdgeAdjustments = await readFile('src/services/lineEdgeAdjustments.ts', 'utf8');
+  const textContent = await readFile('src/services/textContent.ts', 'utf8');
+  const textDefaults = await readFile('src/services/textDefaults.ts', 'utf8');
   assert.match(renderer, /drawLeft = left \+ \(declaration\.deltaX \?\? 0\)/);
   assert.match(renderer, /box\.left \+ deltaX - weightAdjust/);
   assert.match(renderer, /strokeStyle = context\.fillStyle/);
   assert.match(renderer, /strokeWidth: Number\(complete\.strokeWidth \?\? 0\) \+ weightAdjust \* 2/);
   assert.match(graphicRenderer, /range\.glyphOffsetX !== undefined \|\| range\.fontWeightAdjust !== undefined/);
-  assert.match(backgroundRenderer, /createFollowLinesBackground\(style, lines, outputScale\)/);
+  assert.match(backgroundRenderer, /createFollowLinesBackground\(style, lines, lineIds, outputScale\)/);
+  assert.match(backgroundRenderer, /drawHorizontalThreeSlice/);
+  assert.match(backgroundRenderer, /style\.horizontalSlice === undefined/);
+  assert.match(backgroundRenderer, /drawThreeSlice\(context, style, width, height\)/);
+  assert.match(backgroundRenderer, /drawUploadedLine\(context, style, entry\.width, entry\.height\)/);
+  assert.match(backgroundRenderer, /createHorizontalSliceBackground\(style, width, height, outputScale\)/);
+  assert.match(horizontalSlice, /targetLeftWidth \+ targetRightWidth \+ 1/);
+  assert.match(horizontalSlice, /targetCenterWidth: Math\.max\(1,/);
+  assert.equal(textBackgroundEditor.includes('label="横3分割伸縮"'), true);
+  assert.equal(textBackgroundEditor.includes('label="左端固定"'), true);
+  assert.equal(textBackgroundEditor.includes('label="右端固定"'), true);
+  assert.match(documentData, /horizontalSlice: background\.horizontalSlice/);
+  assert.match(styleValidation, /value\.horizontalSlice\.leftRatio/);
+  assert.equal(textDefaultsFileService.includes('delete background.horizontalSlice'), false);
+  assert.match(backgroundRenderer, /calculateAdjustedLineBackgroundBounds/);
+  assert.match(renderer, /logicalLineIndex: lineIndex/);
+  assert.match(backgroundRenderer, /getLogicalLineEdgeAdjustment\(style\.lineEdgeAdjustments, lineIds, line\.logicalLineIndex\)/);
+  assert.doesNotMatch(backgroundRenderer, /lineIds\[lineIndex\]/);
+  assert.match(graphicRenderer, /model\.textLineIds/);
+  assert.match(backgroundRenderer, /line: \{ \.\.\.line, centerX: adjusted\.centerX \}/);
+  assert.match(backgroundRenderer, /explicitSliceWidth\(style, adjusted\.width, height\)/);
+  assert.match(lineEdgeAdjustments, /baselineLeft \+ current\.leftInsetPx/);
+  assert.match(lineEdgeAdjustments, /baselineRight - current\.rightInsetPx/);
+  assert.match(lineEdgeAdjustments, /width: Math\.max\(1, right - left\)/);
+  assert.doesNotMatch(lineEdgeAdjustments, /findExactLineMatches|oldLines\[[^\]]+\] === newLines/);
+  assert.match(lineEdgeAdjustments, /inferTextEditRange/);
+  assert.match(lineEdgeAdjustments, /oldText\.slice\(0, editRange\.oldStart\)/);
+  assert.match(lineEdgeAdjustments, /Align from the end of the unchanged suffix/);
+  assert.match(lineEdgeAdjustments, /editStartsInsideSourceLine \|\| singleLineReplacement \|\| collapsedInsertion/);
+  assert.match(lineEdgeAdjustments, /normalizeLineEdgeAdjustments\(normalizedAdjustments, resolvedIds\)/);
+  assert.match(textContent, /reconcileTextLineIdentity/);
+  assert.match(textContent, /resolveTextEditRange/);
+  assert.match(textContent, /textLineIds: lineIdentity\.textLineIds/);
+  assert.match(textDefaults, /delete background\.lineEdgeAdjustments/);
+  assert.equal(textBackgroundEditor.includes("(background.imageMode ?? 'fixed') === 'followLines'"), true);
+  assert.equal(textBackgroundEditor.includes('行ごとの背景調整'), true);
+  assert.equal(textBackgroundEditor.includes('左端補正'), true);
+  assert.equal(textBackgroundEditor.includes('右端補正'), true);
+  assert.equal(textBackgroundEditor.includes('すべてリセット'), true);
   assert.match(persistence, /value\.projectTextDefaults === undefined \|\| isProjectTextDefaults/);
   assert.equal(textPanel.includes('if (start >= end) return;'), true);
   assert.equal(textPanel.includes('frameId: activeFrameId'), true);
@@ -52,6 +98,9 @@ try {
   assert.equal(partialStyleEditor.includes('setTextSelection'), false);
   assert.equal(editorStore.includes('textSelection.frameId === state.studioProject.activeFrameId'), true);
   assert.equal(textPanel.includes('setPartialStyleExpanded(true)'), false);
+  assert.equal(textPanel.includes('onBeforeInput='), true);
+  assert.equal(textPanel.includes('inputType: inputEvent.inputType'), true);
+  assert.equal(textPanel.includes('onBeforeInput={(event) => {\n            event.preventDefault()'), false);
   assert.equal(partialStyleEditor.includes('onToggle={(event) => onExpandedChange(event.currentTarget.open)}'), true);
   assert.equal(fabricCanvas.includes('suppressSelectionClearRef.current = true'), true);
   assert.equal(fabricCanvas.includes('if (!suppressSelectionClearRef.current) useEditorStore.getState().selectObject(null)'), true);
@@ -126,7 +175,9 @@ try {
   assert.match(partialHorizontalPosition, /renderedGlyphs: GlyphHorizontalLayout\[\]/);
   assert.match(partialHorizontalPosition, /shiftRangeNumericLeaf\(model\.partialStyles, start, end, 'glyphOffsetX', delta, 0\)/);
   assert.match(backgroundRenderer, /style\.imageMode === 'followLines'/);
-  assert.match(backgroundRenderer, /renderer\(style, textWidth \+ style\.paddingX \* 2, textHeight \+ style\.paddingY \* 2\)/);
+  assert.match(backgroundRenderer, /const width = textWidth \+ style\.paddingX \* 2/);
+  assert.match(backgroundRenderer, /const height = textHeight \+ style\.paddingY \* 2/);
+  assert.match(backgroundRenderer, /renderer\(style, width, height\)/);
 
   const textSectionOrder = [
     '<h2>本文入力</h2>',
@@ -194,6 +245,16 @@ try {
       'dynamic glyphOffsetX visual range and alignment',
       'stable glyphOffsetX reference bounds and interaction frame',
       'partial horizontal control spacing',
+      'horizontal 3-slice geometry and minimum width',
+      'legacy/fixed/followLines shared background rendering',
+      'horizontal 3-slice defaults and portable persistence',
+      'per-line followLines edge geometry and safe minimum',
+      'per-line metadata persistence and defaults exclusion',
+      'per-line compact numeric controls and resets',
+      'position-based logical line identity reconciliation',
+      'beforeinput metadata capture without native edit prevention',
+      'ID-keyed renderer lookup and text-edit atomicity',
+      'blank logical-line renderer mapping without adjustment leakage',
     ],
   }, null, 2));
 } finally {

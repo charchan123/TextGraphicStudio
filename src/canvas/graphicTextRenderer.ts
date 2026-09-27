@@ -165,7 +165,7 @@ export const createFabricGraphicText = (model: GraphicTextObject): RenderedGraph
   }));
   const slantedWidth = textWidth + Math.abs(shear) * textHeight;
 
-  const background = createTextBackground(model.background, slantedWidth, textHeight, lineLayouts, Math.max(Math.abs(model.transform.scaleX), Math.abs(model.transform.scaleY)));
+  const background = createTextBackground(model.background, slantedWidth, textHeight, lineLayouts, Math.max(Math.abs(model.transform.scaleX), Math.abs(model.transform.scaleY)), model.textLineIds);
   if (background) children.push(background);
 
   const graphemes = util.string.graphemeSplit(model.text.replace(/\r\n?/g, '\n') || ' ');

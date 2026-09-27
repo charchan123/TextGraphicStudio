@@ -14,6 +14,8 @@ import { deleteBackgroundPreset, listBackgroundPresets, saveBackgroundPreset } f
 import { createObjectId } from '@/src/store/defaults';
 import { useObjectEditor } from '@/src/hooks/useObjectEditor';
 import { useEditorStore } from '@/src/store/editorStore';
+import { DEFAULT_HORIZONTAL_SLICE } from '@/src/services/horizontalSlice';
+import { getLineEdgeAdjustment, setLineEdgeAdjustment } from '@/src/services/lineEdgeAdjustments';
 import type { BackgroundPreset, GraphicTextObject } from '@/src/types/editor';
 
 export function TextBackgroundEditor({ selected }: { selected: GraphicTextObject }) {
@@ -26,6 +28,8 @@ export function TextBackgroundEditor({ selected }: { selected: GraphicTextObject
   const [presetName, setPresetName] = useState('背景デザイン');
   const [presetId, setPresetId] = useState('');
   const background = selected.background;
+  const horizontalSlice = background.horizontalSlice ?? DEFAULT_HORIZONTAL_SLICE;
+  const logicalLines = selected.text.replace(/\r\n?/g, '\n').split('\n');
   const type = background.type === 'rough-band' ? 'generatedRoughYellow' : background.type;
   const report = (error: unknown) => setNotice(error instanceof Error ? error.message : '背景の処理に失敗しました。', 'error');
 
@@ -55,7 +59,9 @@ export function TextBackgroundEditor({ selected }: { selected: GraphicTextObject
     if (!background.image || !presetName.trim()) return;
     setBusy(true);
     try {
-      const preset: BackgroundPreset = { id: createObjectId(), name: presetName.trim(), savedAt: new Date().toISOString(), background: structuredClone(background) };
+      const presetBackground = structuredClone(background);
+      delete presetBackground.lineEdgeAdjustments;
+      const preset: BackgroundPreset = { id: createObjectId(), name: presetName.trim(), savedAt: new Date().toISOString(), background: presetBackground };
       await saveBackgroundPreset(preset);
       setPresets(await listBackgroundPresets()); setPresetId(preset.id);
       setNotice('背景プリセットをこのブラウザに保存しました。', 'success');
@@ -67,7 +73,10 @@ export function TextBackgroundEditor({ selected }: { selected: GraphicTextObject
     if (!preset) return;
     try {
       if (preset.background.image) await prepareBackgroundImage(preset.background.image);
-      editor.commit((object) => ({ ...object, background: structuredClone(preset.background) }));
+      editor.commit((object) => ({
+        ...object,
+        background: { ...structuredClone(preset.background), lineEdgeAdjustments: object.background.lineEdgeAdjustments },
+      }));
       setNotice('背景プリセットを適用しました。', 'success');
     } catch (error) { report(error); }
   };
@@ -104,6 +113,79 @@ export function TextBackgroundEditor({ selected }: { selected: GraphicTextObject
             ? '見本を忠実に使うモードです。画像1枚をテキスト全体の背面へ配置します。'
             : '各行の実寸に合わせ、画像の左右端を保ちながら中央部を自然に伸縮します。'}
         </p>
+        <ToggleRow label="横3分割伸縮" checked={horizontalSlice.enabled} disabled={!background.enabled || !background.image} onCheckedChange={(enabled) => editor.commit((object) => ({
+          ...object,
+          background: {
+            ...object.background,
+            horizontalSlice: { ...(object.background.horizontalSlice ?? DEFAULT_HORIZONTAL_SLICE), enabled },
+          },
+        }))} />
+        {horizontalSlice.enabled && <>
+          <SliderField label="左端固定" value={horizontalSlice.leftRatio * 100} min={0} max={45} step={1} unit="%" disabled={!background.enabled} onBegin={editor.begin} onPreview={(leftRatio) => editor.preview((object) => ({
+            ...object,
+            background: {
+              ...object.background,
+              horizontalSlice: { ...(object.background.horizontalSlice ?? DEFAULT_HORIZONTAL_SLICE), enabled: true, leftRatio: leftRatio / 100 },
+            },
+          }))} onCommit={editor.finish} />
+          <SliderField label="右端固定" value={horizontalSlice.rightRatio * 100} min={0} max={45} step={1} unit="%" disabled={!background.enabled} onBegin={editor.begin} onPreview={(rightRatio) => editor.preview((object) => ({
+            ...object,
+            background: {
+              ...object.background,
+              horizontalSlice: { ...(object.background.horizontalSlice ?? DEFAULT_HORIZONTAL_SLICE), enabled: true, rightRatio: rightRatio / 100 },
+            },
+          }))} onCommit={editor.finish} />
+          <p className="panel-note">左右端は画像比率を維持し、中央だけを横方向へ伸縮します。左右固定部分より狭い幅には縮小しません。</p>
+        </>}
+        {(background.imageMode ?? 'fixed') === 'followLines' && <details className="stroke-editor line-edge-adjustments">
+          <summary><span>行ごとの背景調整</span><span className="stroke-summary">{logicalLines.length}行</span></summary>
+          <div className="stroke-details">
+            <p className="panel-note">＋は内側へ縮小、－は外側へ拡張します。文字位置は変わりません。</p>
+            {logicalLines.map((line, lineIndex) => {
+              const lineId = selected.textLineIds?.[lineIndex];
+              const adjustment = getLineEdgeAdjustment(background.lineEdgeAdjustments, lineId);
+              const update = (side: 'leftInsetPx' | 'rightInsetPx', value: number) => editor.preview((object) => ({
+                ...object,
+                background: {
+                  ...object.background,
+                  lineEdgeAdjustments: lineId
+                    ? setLineEdgeAdjustment(object.background.lineEdgeAdjustments, lineId, { [side]: value })
+                    : object.background.lineEdgeAdjustments,
+                },
+              }));
+              return <div className="line-edge-row" key={lineId ?? lineIndex}>
+                <div className="line-edge-row-heading">
+                  <strong>{lineIndex + 1}行目「{line.trim() || '空行'}」</strong>
+                  <Button type="button" size="sm" variant="ghost" disabled={selected.fullyLocked || (adjustment.leftInsetPx === 0 && adjustment.rightInsetPx === 0)} onClick={() => editor.commit((object) => ({
+                    ...object,
+                    background: {
+                      ...object.background,
+                      lineEdgeAdjustments: lineId
+                        ? setLineEdgeAdjustment(object.background.lineEdgeAdjustments, lineId, { leftInsetPx: 0, rightInsetPx: 0 })
+                        : object.background.lineEdgeAdjustments,
+                    },
+                  }))}>リセット</Button>
+                </div>
+                <div className="line-edge-inputs">
+                  {([['leftInsetPx', '左端補正'], ['rightInsetPx', '右端補正']] as const).map(([side, label]) => <label key={side}>
+                    <span>{label}</span>
+                    <span className="number-with-unit">
+                      <input type="number" min={-500} max={500} step={1} value={adjustment[side]} disabled={selected.fullyLocked} aria-label={`${lineIndex + 1}行目の${label}`} onFocus={editor.begin} onChange={(event) => {
+                        const value = event.currentTarget.valueAsNumber;
+                        if (Number.isFinite(value)) update(side, Math.min(500, Math.max(-500, value)));
+                      }} onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }} onBlur={editor.finish} />
+                      <span>px</span>
+                    </span>
+                  </label>)}
+                </div>
+              </div>;
+            })}
+            <Button type="button" size="sm" variant="outline" disabled={selected.fullyLocked || !Object.values(background.lineEdgeAdjustments ?? {}).some((adjustment) => adjustment.leftInsetPx !== 0 || adjustment.rightInsetPx !== 0)} onClick={() => editor.commit((object) => ({
+              ...object,
+              background: { ...object.background, lineEdgeAdjustments: undefined },
+            }))}>すべてリセット</Button>
+          </div>
+        </details>}
         <p className="panel-note">PNG・静的SVG / 12MB・1600万画素まで。透明な外周を取り除き、SVGもローカルでPNG化します。</p>
       </div>}
       {type !== 'none' && <>

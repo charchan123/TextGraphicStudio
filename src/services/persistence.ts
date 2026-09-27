@@ -33,6 +33,9 @@ export const isProjectDocument = (value: unknown): value is ProjectDocument => {
       object.kind === 'graphic-text' &&
       typeof object.id === 'string' &&
       typeof object.text === 'string' && isRecord(object.typography)
+      && (object.textLineIds === undefined || (Array.isArray(object.textLineIds)
+        && object.textLineIds.length <= 10000
+        && object.textLineIds.every((lineId) => typeof lineId === 'string' && lineId.length > 0 && lineId.length <= 160)))
       && isRecord(object.characterScale)
       && isFiniteNumber(object.characterScale.kanji)
       && isFiniteNumber(object.characterScale.hiragana)

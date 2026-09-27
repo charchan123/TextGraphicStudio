@@ -1,4 +1,5 @@
 import type { ColorPalette, FontReference, GraphicTextObject, ProjectDocument, ProjectTextDefaults, TextDesignDefaults } from '@/src/types/editor';
+import { createTextLineIds } from '@/src/services/lineEdgeAdjustments';
 import { clonePartialStrokes, getStrokeLayers } from '@/src/services/strokes';
 import { normalizeLineGapOffsets } from '@/src/services/lineGapOffsets';
 
@@ -66,6 +67,7 @@ export const DEFAULT_GRAPHIC_TEXT_PRESET: GraphicTextPreset = {
     roughness: 0.55,
     seed: 1847,
     imageMode: 'fixed',
+    horizontalSlice: { enabled: false, leftRatio: 0.2, rightRatio: 0.2 },
     followSettings: { capRatio: 0.22, seamOverlap: 2, lineOverlap: 6 },
   },
   partialStyles: [],
@@ -90,11 +92,13 @@ export const createGraphicText = (
   preserveBackgroundSeed = false,
 ): GraphicTextObject => {
   const offset = Math.min(index, 5) * 28;
+  const normalizedText = text.trim() || '新しいテキスト';
   return {
     ...preset,
     id: makeId(),
     name: `テキスト ${index + 1}`,
-    text: text.trim() || '新しいテキスト',
+    text: normalizedText,
+    textLineIds: createTextLineIds(normalizedText),
     position: {
       x: canvasWidth / 2 + offset,
       y: canvasHeight / 2 + offset,
@@ -120,6 +124,9 @@ export const createGraphicText = (
       seed: preserveBackgroundSeed ? preset.background.seed : preset.background.seed + index * 137,
       followSettings: preset.background.followSettings
         ? { ...preset.background.followSettings }
+        : undefined,
+      horizontalSlice: preset.background.horizontalSlice
+        ? { ...preset.background.horizontalSlice }
         : undefined,
     },
     partialStyles: preset.partialStyles.map((style) => ({ ...style, strokes: clonePartialStrokes(style.strokes) })),
@@ -153,6 +160,9 @@ export const createInitialProject = (
         ...projectTextDefaults.background,
         followSettings: projectTextDefaults.background.followSettings
           ? { ...projectTextDefaults.background.followSettings }
+          : undefined,
+        horizontalSlice: projectTextDefaults.background.horizontalSlice
+          ? { ...projectTextDefaults.background.horizontalSlice }
           : undefined,
       },
       partialStyles: [],

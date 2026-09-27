@@ -11,6 +11,8 @@ import type {
   RoughBandStyle,
 } from '@/src/types/editor';
 import { normalizeLineGapOffsets } from '@/src/services/lineGapOffsets';
+import { normalizeHorizontalSlice } from '@/src/services/horizontalSlice';
+import { normalizeLineEdgeAdjustments, normalizeTextLineIds } from '@/src/services/lineEdgeAdjustments';
 
 export const DEFAULT_FOLLOW_SETTINGS = {
   capRatio: 0.22,
@@ -34,6 +36,12 @@ export const cloneBackground = (background: RoughBandStyle): RoughBandStyle => (
   followSettings: background.followSettings
     ? { ...background.followSettings }
     : undefined,
+  horizontalSlice: background.horizontalSlice
+    ? { ...background.horizontalSlice }
+    : undefined,
+  lineEdgeAdjustments: background.lineEdgeAdjustments
+    ? Object.fromEntries(Object.entries(background.lineEdgeAdjustments).map(([lineId, adjustment]) => [lineId, { ...adjustment }]))
+    : undefined,
 });
 
 export const cloneFontCatalog = (catalog: FontReference[]): FontReference[] =>
@@ -41,6 +49,7 @@ export const cloneFontCatalog = (catalog: FontReference[]): FontReference[] =>
 
 export const cloneGraphicObject = (object: GraphicTextObject): GraphicTextObject => ({
   ...object,
+  textLineIds: object.textLineIds ? [...object.textLineIds] : undefined,
   position: { ...object.position },
   size: { ...object.size },
   transform: { ...object.transform },
@@ -56,18 +65,25 @@ export const cloneGraphicObject = (object: GraphicTextObject): GraphicTextObject
   partialStyles: object.partialStyles.map(clonePartialStyle),
 });
 
-export const normalizeTextBackground = (background: RoughBandStyle): RoughBandStyle => ({
+export const normalizeTextBackground = (background: RoughBandStyle, textLineIds: readonly string[] = []): RoughBandStyle => ({
   ...cloneBackground(background),
   offsetX: background.offsetX ?? 0,
   offsetY: background.offsetY ?? 0,
   imageMode: background.imageMode === 'followLines' ? 'followLines' : 'fixed',
+  horizontalSlice: background.horizontalSlice
+    ? normalizeHorizontalSlice(background.horizontalSlice)
+    : undefined,
+  lineEdgeAdjustments: normalizeLineEdgeAdjustments(background.lineEdgeAdjustments, textLineIds),
   followSettings: background.followSettings
     ? { ...background.followSettings }
     : { ...DEFAULT_FOLLOW_SETTINGS },
 });
 
-const normalizeObject = (object: GraphicTextObject): GraphicTextObject => ({
+const normalizeObject = (object: GraphicTextObject): GraphicTextObject => {
+  const textLineIds = normalizeTextLineIds(object.text, object.textLineIds);
+  return {
   ...cloneGraphicObject(object),
+  textLineIds,
   typography: {
     ...object.typography,
     fontWeightAdjust: object.typography.fontWeightAdjust ?? 0,
@@ -76,7 +92,7 @@ const normalizeObject = (object: GraphicTextObject): GraphicTextObject => ({
     glyphScaleX: object.typography.glyphScaleX ?? 1,
     glyphScaleY: object.typography.glyphScaleY ?? 1,
   },
-  background: normalizeTextBackground(object.background),
+  background: normalizeTextBackground(object.background, textLineIds),
   characterScale: {
     ...object.characterScale,
     symbol: object.characterScale.symbol ?? 1,
@@ -84,7 +100,8 @@ const normalizeObject = (object: GraphicTextObject): GraphicTextObject => ({
   lineGapOffsets: normalizeLineGapOffsets(object.text, object.lineGapOffsets),
   locked: Boolean(object.locked),
   fullyLocked: Boolean(object.fullyLocked),
-});
+  };
+};
 
 export const normalizeProjectDocument = (project: ProjectDocument): ProjectDocument => {
   const candidate = project as ProjectDocument & {

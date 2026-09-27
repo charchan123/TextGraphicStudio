@@ -225,8 +225,8 @@ export class StyledGraphicText extends FabricText {
     context.restore();
   }
 
-  getLineLayouts(): Array<{ width: number; height: number; centerX: number; centerY: number }> {
-    const layouts: Array<{ width: number; height: number; centerX: number; centerY: number }> = [];
+  getLineLayouts(): Array<{ width: number; height: number; centerX: number; centerY: number; logicalLineIndex: number }> {
+    const layouts: Array<{ width: number; height: number; centerX: number; centerY: number; logicalLineIndex: number }> = [];
     let top = -this.height / 2;
     this._textLines.forEach((line, lineIndex) => {
       const baseHeight = this.rawLineHeight(lineIndex);
@@ -264,6 +264,7 @@ export class StyledGraphicText extends FabricText {
           height,
           centerX: -this.width / 2 + this._getLineLeftOffset(lineIndex) + (minLeft + maxRight) / 2,
           centerY: top + minTop + height / 2,
+          logicalLineIndex: lineIndex,
         });
       }
       top += this.getHeightOfLine(lineIndex);
