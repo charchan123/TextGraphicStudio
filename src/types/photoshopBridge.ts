@@ -7,7 +7,8 @@ import type {
 } from '@/src/types/editor';
 
 export const PHOTOSHOP_BRIDGE_FORMAT = 'text-graphic-studio-photoshop-bridge' as const;
-export const PHOTOSHOP_BRIDGE_VERSION = 1 as const;
+export const PHOTOSHOP_BRIDGE_LEGACY_VERSION = 1 as const;
+export const PHOTOSHOP_BRIDGE_VERSION = 2 as const;
 
 export interface PhotoshopBridgeBounds {
   left: number;
@@ -21,6 +22,18 @@ export interface PhotoshopBridgeBounds {
 export interface PhotoshopBridgeWarning {
   code: string;
   message: string;
+}
+
+export type PhotoshopBridgeAssetKind = 'background-render' | 'background-source-raster';
+
+export interface PhotoshopBridgeAsset {
+  assetId: string;
+  kind: PhotoshopBridgeAssetKind;
+  mimeType: 'image/png';
+  encoding: 'base64';
+  width: number;
+  height: number;
+  data: string;
 }
 
 export interface PhotoshopBridgeFont {
@@ -73,6 +86,9 @@ export interface PhotoshopBridgeBackgroundMetadata {
   };
   lineEdgeAdjustments?: Record<string, LineEdgeAdjustment>;
   textLineIds?: string[];
+  renderedAssetId?: string;
+  sourceRasterAssetId?: string;
+  renderBounds?: PhotoshopBridgeBounds;
 }
 
 export interface PhotoshopBridgeTextObject {
@@ -116,7 +132,7 @@ export interface PhotoshopBridgeTextObject {
 
 export interface PhotoshopBridgeFrameV1 {
   format: typeof PHOTOSHOP_BRIDGE_FORMAT;
-  version: typeof PHOTOSHOP_BRIDGE_VERSION;
+  version: typeof PHOTOSHOP_BRIDGE_LEGACY_VERSION;
   exportedAt: string;
   projectName: string;
   frameId: string;
@@ -125,3 +141,10 @@ export interface PhotoshopBridgeFrameV1 {
   canvasHeight: number;
   objects: PhotoshopBridgeTextObject[];
 }
+
+export interface PhotoshopBridgeFrameV2 extends Omit<PhotoshopBridgeFrameV1, 'version'> {
+  version: typeof PHOTOSHOP_BRIDGE_VERSION;
+  assets: PhotoshopBridgeAsset[];
+}
+
+export type PhotoshopBridgeFrame = PhotoshopBridgeFrameV1 | PhotoshopBridgeFrameV2;

@@ -421,12 +421,12 @@ export function EditorApp() {
   };
 
   const handleExportPhotoshopBridge = () => {
-    try {
-      const bridge = downloadPhotoshopBridgeFrame(useEditorStore.getState().getStudioProjectSnapshot());
-      setNotice(`Photoshop Bridgeを書き出しました（Text Layer ${bridge.objects.length}件）。`, 'success');
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Photoshop Bridgeを書き出せませんでした。', 'error');
-    }
+    void runTask(
+      async () => {
+        await downloadPhotoshopBridgeFrame(useEditorStore.getState().getStudioProjectSnapshot());
+      },
+      'Photoshop Bridge v2を書き出しました。',
+    );
   };
 
   const handleSaveTemplate = (includePosition: boolean) => {

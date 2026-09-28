@@ -18,6 +18,12 @@ export interface RenderedGraphicText {
   intrinsicHeight: number;
 }
 
+export interface RenderedGraphicTextBackground {
+  background: FabricObject | null;
+  intrinsicWidth: number;
+  intrinsicHeight: number;
+}
+
 /** Preserve overhanging italic ink and transformed strokes in the single shadow cache. */
 class TextSilhouetteGroup extends Group {
   inkPadding = 0;
@@ -134,6 +140,46 @@ export const measureGraphicTextHorizontalGeometry = (
   );
 };
 
+const createBackgroundFromMeasurement = (
+  model: GraphicTextObject,
+  measurementText: StyledGraphicText,
+): RenderedGraphicTextBackground => {
+  const textWidth = Math.max(1, measurementText.width);
+  const textHeight = Math.max(1, measurementText.height);
+  const skewX = measurementText.skewX ?? 0;
+  const shear = Math.tan(skewX * Math.PI / 180);
+  const lineLayouts = measurementText.getLineLayouts().map((line) => ({
+    ...line,
+    centerX: line.centerX + shear * line.centerY,
+    width: line.width + Math.abs(shear) * line.height,
+  }));
+  const slantedWidth = textWidth + Math.abs(shear) * textHeight;
+  return {
+    background: createTextBackground(
+      model.background,
+      slantedWidth,
+      textHeight,
+      lineLayouts,
+      Math.max(Math.abs(model.transform.scaleX), Math.abs(model.transform.scaleY)),
+      model.textLineIds,
+    ),
+    intrinsicWidth: slantedWidth,
+    intrinsicHeight: textHeight,
+  };
+};
+
+/** Creates only the shared Text background geometry used by Editor, Preview and exports. */
+export const createFabricGraphicTextBackground = (
+  model: GraphicTextObject,
+): RenderedGraphicTextBackground => {
+  const measurementText = createTextLayer(model, undefined, 0, undefined);
+  try {
+    return createBackgroundFromMeasurement(model, measurementText);
+  } finally {
+    measurementText.dispose();
+  }
+};
+
 export const createFabricGraphicText = (model: GraphicTextObject): RenderedGraphicText => {
   const children: FabricObject[] = [];
   const glyphOffsetPadding = Math.max(
@@ -154,18 +200,7 @@ export const createFabricGraphicText = (model: GraphicTextObject): RenderedGraph
     : undefined;
 
   const measurementText = createTextLayer(model, undefined, 0, undefined);
-  const textWidth = Math.max(1, measurementText.width);
-  const textHeight = Math.max(1, measurementText.height);
-  const skewX = measurementText.skewX ?? 0;
-  const shear = Math.tan(skewX * Math.PI / 180);
-  const lineLayouts = measurementText.getLineLayouts().map((line) => ({
-    ...line,
-    centerX: line.centerX + shear * line.centerY,
-    width: line.width + Math.abs(shear) * line.height,
-  }));
-  const slantedWidth = textWidth + Math.abs(shear) * textHeight;
-
-  const background = createTextBackground(model.background, slantedWidth, textHeight, lineLayouts, Math.max(Math.abs(model.transform.scaleX), Math.abs(model.transform.scaleY)), model.textLineIds);
+  const { background } = createBackgroundFromMeasurement(model, measurementText);
   if (background) children.push(background);
 
   const graphemes = util.string.graphemeSplit(model.text.replace(/\r\n?/g, '\n') || ' ');

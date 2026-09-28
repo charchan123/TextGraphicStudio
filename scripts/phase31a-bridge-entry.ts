@@ -2,12 +2,14 @@ import assert from 'node:assert/strict';
 
 import {
   buildPhotoshopBridgeFrame,
+  buildPhotoshopBridgeFrameV1,
   calculatePhotoshopBridgeVisualBounds,
   letterSpacingPxToPhotoshopTracking,
   serializePhotoshopBridge,
   validatePhotoshopBridge,
 } from '@/src/services/photoshopBridge';
 import { createStudioProject } from '@/src/services/studioProject';
+import { calculatePhotoshopBridgeCropBounds } from '@/src/services/photoshopBridgeBackground';
 import { createGraphicText } from '@/src/store/defaults';
 
 const exportedAt = '2026-09-27T00:00:00.000Z';
@@ -56,7 +58,7 @@ first.background = {
     id: 'background-image',
     fileName: 'band.svg',
     sourceMimeType: 'image/svg+xml',
-    dataUrl: 'data:image/png;base64,SHOULD_NOT_BE_EXPORTED',
+    dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL8WQAAAABJRU5ErkJggg==',
     width: 900,
     height: 200,
     sourceSvg: {
@@ -80,16 +82,32 @@ second.fill = {
     { offset: 1, color: '#0000FF' },
   ],
 };
-frame.document.objects.push(second);
+second.background = structuredClone(first.background);
+const third = createGraphicText('背景なし', 2, frame.document.canvas.width, frame.document.canvas.height);
+third.id = 'text-c';
+third.name = '背景なし';
+third.zIndex = first.zIndex + 1;
+third.background = { ...third.background, enabled: false };
+frame.document.objects.push(second, third);
 
-const bridge = buildPhotoshopBridgeFrame(project, exportedAt);
+const renderPng = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL8WQAAAABJRU5ErkJggg==';
+const bridge = await buildPhotoshopBridgeFrame(project, exportedAt, async (object) => (
+  object.background.enabled
+    ? {
+      dataUrl: renderPng,
+      width: 180,
+      height: 64,
+      renderBounds: { left: 230, top: 448, right: 410, bottom: 512, width: 180, height: 64 },
+    }
+    : null
+));
 assert.equal(bridge.format, 'text-graphic-studio-photoshop-bridge');
-assert.equal(bridge.version, 1);
+assert.equal(bridge.version, 2);
 assert.equal(bridge.exportedAt, exportedAt);
 assert.equal(bridge.canvasWidth, frame.document.canvas.width);
 assert.equal(bridge.canvasHeight, frame.document.canvas.height);
-assert.equal(bridge.objects.length, 2);
-assert.deepEqual(bridge.objects.map((object) => object.objectId), ['text-b', 'text-a']);
+assert.equal(bridge.objects.length, 3);
+assert.deepEqual(bridge.objects.map((object) => object.objectId), ['text-b', 'text-a', 'text-c']);
 
 const exported = bridge.objects.find((object) => object.objectId === 'text-a');
 assert.ok(exported);
@@ -114,11 +132,27 @@ assert.deepEqual(exported.metadata.background.lineEdgeAdjustments?.['line-b'], {
 assert.equal(exported.metadata.background.image?.fileName, 'band.svg');
 assert.equal('dataUrl' in (exported.metadata.background.image ?? {}), false);
 assert.equal('markup' in (exported.metadata.background.image?.sourceSvg ?? {}), false);
+assert.equal(exported.metadata.background.renderedAssetId, 'bg-render-text-a');
+assert.equal(exported.metadata.background.sourceRasterAssetId, 'bg-source-1');
+assert.deepEqual(exported.metadata.background.renderBounds, {
+  left: 230, top: 448, right: 410, bottom: 512, width: 180, height: 64,
+});
+assert.equal(bridge.assets.filter((asset) => asset.kind === 'background-render').length, 2);
+assert.equal(bridge.assets.filter((asset) => asset.kind === 'background-source-raster').length, 1);
+assert.equal(bridge.assets.every((asset) => asset.mimeType === 'image/png' && asset.encoding === 'base64'), true);
+assert.equal(
+  bridge.objects.find((object) => object.objectId === 'text-b')?.metadata.background.sourceRasterAssetId,
+  'bg-source-1',
+);
+assert.equal(
+  bridge.objects.find((object) => object.objectId === 'text-c')?.metadata.background.renderedAssetId,
+  undefined,
+);
 assert.equal(exported.metadata.glyphOffsets[0]?.glyphOffsetX, 12);
 assert.ok(exported.warnings.some((warning) => warning.code === 'partial-styles'));
 assert.ok(exported.warnings.some((warning) => warning.code === 'glyph-offsets'));
 assert.ok(exported.warnings.some((warning) => warning.code === 'line-gap-offsets'));
-assert.ok(exported.warnings.some((warning) => warning.code === 'background'));
+assert.equal(exported.warnings.some((warning) => warning.code === 'background'), false);
 assert.ok(bridge.objects.find((object) => object.objectId === 'text-b')?.warnings.some((warning) => warning.code === 'gradient'));
 
 const bounds = calculatePhotoshopBridgeVisualBounds({
@@ -128,12 +162,19 @@ const bounds = calculatePhotoshopBridgeVisualBounds({
   transform: { scaleX: 2, scaleY: 1, rotation: 0 },
 });
 assert.deepEqual(bounds, { left: 0, top: 180, right: 200, bottom: 220, width: 200, height: 40 });
+assert.deepEqual(
+  calculatePhotoshopBridgeCropBounds(330, 900, 10, 8, 400, 100),
+  { left: 340, top: 908, right: 740, bottom: 1008, width: 400, height: 100 },
+);
 assert.equal(letterSpacingPxToPhotoshopTracking(3, 60), 50);
 assert.equal(validatePhotoshopBridge(bridge), true);
-assert.equal(validatePhotoshopBridge({ ...bridge, version: 2 }), false);
+const legacy = buildPhotoshopBridgeFrameV1(project, exportedAt);
+assert.equal(legacy.version, 1);
+assert.equal(validatePhotoshopBridge(legacy), true);
+assert.equal(validatePhotoshopBridge({ ...bridge, version: 99 }), false);
 assert.equal(validatePhotoshopBridge({ ...bridge, objects: [{ type: 'image' }] }), false);
 const serialized = serializePhotoshopBridge(bridge);
-assert.match(serialized, /"version": 1/);
+assert.match(serialized, /"version": 2/);
 assert.doesNotMatch(serialized, /SHOULD_NOT_BE_EXPORTED/);
 
-console.log('Phase 3.1A TGS bridge checks passed (34 checks).');
+console.log('Phase 3.1B TGS bridge checks passed.');
